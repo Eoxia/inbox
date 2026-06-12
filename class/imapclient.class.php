@@ -2,35 +2,358 @@
 /**
  *	\file       class/imapclient.class.php
  *	\ingroup    inbox
- *	\brief      Class to connect to IMAP
+ *	\brief      Class to handle IMAP connections and retrieve emails
  */
 
-class ImapClient
+class IMAPClient
 {
-	private $server;
-	private $port;
-	private $user;
-	private $password;
-	private $connection;
+	private $mbox;
+	public $error;
+	public $errors = array();
 
-	public function __construct($server, $port, $user, $password)
-	{
-		$this->server = $server;
-		$this->port = $port;
-		$this->user = $user;
-		$this->password = $password;
-	}
+	public $conn_string_base = '';
 
-	public function connect()
+	/**
+	 * Connect to IMAP server
+	 *
+	 * @param string $host      IMAP server host
+	 * @param int    $port      IMAP server port
+	 * @param string $security  'ssl', 'starttls', 'none'
+	 * @param string $login     Username
+	 * @param string $password  Password
+	 * @param string $folder    Folder name
+	 * @return bool             True if connected, False if error
+	 */
+	public function connect($host, $port, $security, $login, $password, $folder = 'INBOX')
 	{
-		// Native PHP IMAP connection stub
-		// $this->connection = imap_open("{".$this->server.":".$this->port."/imap/ssl}INBOX", $this->user, $this->password);
+		if (!function_exists('imap_open')) {
+			$this->error = "PHP IMAP extension is not installed";
+			return false;
+		}
+
+		$conn_string = "{" . $host . ":" . $port . "/imap";
+		
+		if ($security == 'ssl') {
+			$conn_string .= "/ssl";
+		} elseif ($security == 'starttls' || $security == 'tls') {
+			$conn_string .= "/tls";
+		}
+		
+		// Add /novalidate-cert for typical dev environments, though not ideal for strict prod
+		$conn_string .= "/novalidate-cert}";
+		$this->conn_string_base = $conn_string;
+		
+		// Map simple names to standard IMAP folder encoding if needed
+		if (strtoupper($folder) != 'INBOX') {
+			// Convert encoding to modified UTF-7 for IMAP folder names
+			$folder = imap_utf7_encode($folder);
+		}
+		
+		$conn_string .= $folder;
+
+		// Clear previous errors
+		imap_errors();
+
+		$this->mbox = @imap_open($conn_string, $login, $password);
+
+		if (!$this->mbox) {
+			$errors = imap_errors();
+			$this->error = "Failed to connect to IMAP server. " . ($errors ? implode(', ', $errors) : "Unknown error");
+			return false;
+		}
+
 		return true;
 	}
 
-	public function fetchEmails()
+	/**
+	 * Retrieve a list of messages headers
+	 *
+	 * @param int $limit_nb    Max number of messages to fetch
+	 * @param int $limit_days  Max age in days
+	 * @return array|bool      Array of message objects or false on error
+	 */
+	public function getMessages($limit_nb = 500, $limit_days = 180)
 	{
-		// Stub to fetch emails
-		return array();
+		if (!$this->mbox) {
+			$this->error = "Not connected";
+			return false;
+		}
+
+		$date_since = date("d-M-Y", strtotime("-".$limit_days." days"));
+		$emails = imap_search($this->mbox, 'SINCE "'.$date_since.'"');
+
+		if (!$emails) {
+			// No emails found
+			return array();
+		}
+
+		// Sort by newest first
+		rsort($emails);
+
+		// Apply numerical limit
+		$emails = array_slice($emails, 0, $limit_nb);
+
+		$result = array();
+		
+		// Fetch overviews
+		$sequence = implode(',', $emails);
+		$overviews = imap_fetch_overview($this->mbox, $sequence, 0);
+
+		if ($overviews) {
+			foreach ($overviews as $overview) {
+				$item = new stdClass();
+				$item->uid = $overview->uid;
+				$item->msgno = $overview->msgno;
+				
+				// Decode subject (can be encoded in UTF-8 or ISO-8859-1)
+				$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
+				$item->subject = $this->decodeMimeHeader($subject);
+				
+				// Decode sender
+				$from = isset($overview->from) ? $overview->from : '';
+				$item->from = $this->decodeMimeHeader($from);
+				
+				$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
+				$item->seen = (isset($overview->seen) && $overview->seen) ? 1 : 0;
+				$item->recent = (isset($overview->recent) && $overview->recent) ? 1 : 0;
+				$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
+				$item->deleted = (isset($overview->deleted) && $overview->deleted) ? 1 : 0;
+				
+				// Optional snippet? Could fetch a small body part here, but it's slow.
+				// We'll leave it empty and fetch on demand, or fetch first 100 bytes.
+				$item->snippet = ''; 
+
+				$result[] = $item;
+			}
+		}
+
+		// Sort result again by msgno descending since imap_fetch_overview doesn't guarantee order
+		usort($result, function($a, $b) {
+			return $b->msgno - $a->msgno;
+		});
+
+		return $result;
+	}
+
+	/**
+	 * Decode MIME headers
+	 * @param string $string 
+	 * @return string
+	 */
+	private function decodeMimeHeader($string) 
+	{
+		$decoded = '';
+		$elements = imap_mime_header_decode($string);
+		if (is_array($elements)) {
+			foreach ($elements as $element) {
+				$charset = $element->charset;
+				$text = $element->text;
+				if ($charset != 'default' && strtolower($charset) != 'utf-8' && strtolower($charset) != 'us-ascii') {
+					$text = mb_convert_encoding($text, 'UTF-8', $charset);
+				}
+				$decoded .= $text;
+			}
+		} else {
+			$decoded = $string;
+		}
+		return $decoded;
+	}
+
+	/**
+	 * Retrieve message body (HTML preferred, else plain text)
+	 *
+	 * @param int $msgno Message number
+	 * @return string
+	 */
+	public function getMessageBody($msgno)
+	{
+		if (!$this->mbox) return '';
+
+		$structure = @imap_fetchstructure($this->mbox, $msgno);
+		$body = $this->getPart($this->mbox, $msgno, "TEXT/HTML", $structure);
+		
+		if (empty($body)) {
+			$body = $this->getPart($this->mbox, $msgno, "TEXT/PLAIN", $structure);
+			if ($body) {
+				$body = nl2br(htmlspecialchars($body));
+			}
+		}
+		
+		if (empty($body)) {
+			// Fallback
+			$body = @imap_body($this->mbox, $msgno);
+		}
+		
+		return $body;
+	}
+
+	/**
+	 * Extract specific part from IMAP message
+	 */
+	private function getPart($mbox, $msgno, $mimeType, $structure, $partNumber = false)
+	{
+		if (!$structure) return false;
+
+		$prefix = ($partNumber ? $partNumber . "." : "");
+		
+		if ($structure->type == 1) { // MULTIPART
+			foreach ($structure->parts as $index => $subStruct) {
+				$partNum = $prefix . ($index + 1);
+				if ($structure->subtype == "ALTERNATIVE") {
+					// In alternative, HTML is usually last. We check if it matches what we want.
+					$mime = $this->getMimeType($subStruct);
+					if (strtoupper($mime) == strtoupper($mimeType)) {
+						return $this->decodeBody(@imap_fetchbody($mbox, $msgno, $partNum), $subStruct->encoding, $subStruct->parameters);
+					}
+				}
+				$data = $this->getPart($mbox, $msgno, $mimeType, $subStruct, $partNum);
+				if ($data) return $data;
+			}
+		} else {
+			$mime = $this->getMimeType($structure);
+			if (strtoupper($mime) == strtoupper($mimeType)) {
+				$partNum = $partNumber ? $partNumber : "1";
+				return $this->decodeBody(@imap_fetchbody($mbox, $msgno, $partNum), $structure->encoding, $structure->parameters);
+			}
+		}
+		return false;
+	}
+
+	private function getMimeType($structure)
+	{
+		$primary = array("TEXT", "MULTIPART", "MESSAGE", "APPLICATION", "AUDIO", "IMAGE", "VIDEO", "OTHER");
+		if ($structure->type && isset($primary[$structure->type])) {
+			return $primary[$structure->type] . "/" . $structure->subtype;
+		}
+		return "TEXT/PLAIN";
+	}
+
+	private function decodeBody($body, $encoding, $parameters)
+	{
+		if ($encoding == 4) {
+			$body = quoted_printable_decode($body);
+		} elseif ($encoding == 3) {
+			$body = base64_decode($body);
+		}
+		
+		$charset = 'UTF-8';
+		if ($parameters) {
+			foreach ($parameters as $p) {
+				if (strtolower($p->attribute) == 'charset') {
+					$charset = $p->value;
+					break;
+				}
+			}
+		}
+		
+		if (strtolower($charset) != 'utf-8') {
+			$body = @mb_convert_encoding($body, 'UTF-8', $charset);
+		}
+		
+		return $body;
+	}
+
+	/**
+	 * Retrieve all folders/mailboxes
+	 * @return array
+	 */
+	public function getFolders()
+	{
+		if (!$this->mbox) return array();
+		
+		$mailboxes = imap_getmailboxes($this->mbox, $this->conn_string_base, "*");
+		$folders = array();
+		
+		if (is_array($mailboxes)) {
+			foreach ($mailboxes as $mailbox) {
+				$name = str_replace($this->conn_string_base, '', $mailbox->name);
+				$cleanName = imap_utf7_decode($name);
+				
+				// Standardize icon/type mapping based on common names
+				$type = 'folder';
+				$lower = strtolower($cleanName);
+				if ($lower == 'inbox') $type = 'inbox';
+				elseif (strpos($lower, 'sent') !== false || strpos($lower, 'envoy') !== false) $type = 'sent';
+				elseif (strpos($lower, 'draft') !== false || strpos($lower, 'brouillon') !== false) $type = 'drafts';
+				elseif (strpos($lower, 'trash') !== false || strpos($lower, 'corbeille') !== false) $type = 'trash';
+				elseif (strpos($lower, 'spam') !== false || strpos($lower, 'junk') !== false || strpos($lower, 'pourriel') !== false) $type = 'spam';
+				elseif (strpos($lower, 'archive') !== false) $type = 'archive';
+				
+				// Clean display name
+				// Remove "INBOX." prefix if present
+				if (stripos($cleanName, 'INBOX.') === 0) {
+					$cleanName = substr($cleanName, 6);
+				}
+				
+				// Translate standard names
+				if ($type == 'inbox' && strtolower($cleanName) == 'inbox') $cleanName = 'Boîte de réception';
+				elseif ($type == 'sent' && strtolower($cleanName) == 'sent') $cleanName = 'Envoyés';
+				elseif ($type == 'drafts' && strtolower($cleanName) == 'drafts') $cleanName = 'Brouillons';
+				elseif ($type == 'trash' && strtolower($cleanName) == 'trash') $cleanName = 'Corbeille';
+				elseif ($type == 'spam' && (strtolower($cleanName) == 'spam' || strtolower($cleanName) == 'junk')) $cleanName = 'Pourriel';
+				elseif ($type == 'archive' && strtolower($cleanName) == 'archive') $cleanName = 'Archivé';
+				
+				$folders[] = array(
+					'id' => $name,
+					'name' => $cleanName,
+					'type' => $type
+				);
+			}
+			
+			// Sort folders: Inbox, Sent, Drafts, then others
+			usort($folders, function($a, $b) {
+				$order = array(
+					'inbox' => 1,
+					'sent' => 2,
+					'drafts' => 3,
+					'archive' => 4,
+					'spam' => 5,
+					'trash' => 6,
+					'folder' => 10
+				);
+				
+				$weightA = isset($order[$a['type']]) ? $order[$a['type']] : 10;
+				$weightB = isset($order[$b['type']]) ? $order[$b['type']] : 10;
+				
+				if ($weightA == $weightB) {
+					return strcasecmp($a['name'], $b['name']);
+				}
+				return $weightA - $weightB;
+			});
+		}
+		
+		return $folders;
+	}
+
+	/**
+	 * Append a message to a specific folder (e.g. Sent folder)
+	 * @param string $folder   Destination folder name
+	 * @param string $message  Raw MIME message string
+	 * @return bool
+	 */
+	public function appendMessage($folder, $message)
+	{
+		if (!$this->mbox) return false;
+		
+		$targetBox = $this->conn_string_base . imap_utf7_encode($folder);
+		
+		// \Seen flag sets the message as read in the Sent folder
+		if (imap_append($this->mbox, $targetBox, $message, "\\Seen")) {
+			return true;
+		} else {
+			$this->error = "Failed to append message to folder: " . imap_last_error();
+			return false;
+		}
+	}
+
+	/**
+	 * Disconnect from IMAP server
+	 */
+	public function close()
+	{
+		if ($this->mbox) {
+			imap_close($this->mbox);
+			$this->mbox = null;
+		}
 	}
 }

@@ -1,8 +1,8 @@
 <?php
 /**
- *	\file       ajax/get_emails.php
+ *	\file       ajax/get_email_body.php
  *	\ingroup    inbox
- *	\brief      Ajax endpoint to retrieve emails
+ *	\brief      Ajax endpoint to retrieve a specific email body
  */
 
 $res = 0;
@@ -15,6 +15,9 @@ if (!($res && preg_match('/^http/', $res))) {
 if (!$res) {
 	die("Include of main fails");
 }
+
+ini_set('display_errors', '0');
+error_reporting(0);
 
 require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/inboxaccount.class.php';
 require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/imapclient.class.php';
@@ -29,12 +32,18 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
+$msgno = GETPOST('msgno', 'int');
+if (empty($msgno)) {
+	print json_encode(array('error' => 'Missing message number'));
+	exit;
+}
+
 // Find first active account for the user or shared
 $sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
 $resql = $db->query($sql);
 
 if (!$resql || $db->num_rows($resql) == 0) {
-	// Fallback: try to find ANY active account if none specific to user (for initial testing)
+	// Fallback
 	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
 	$resql = $db->query($sql);
 	if (!$resql || $db->num_rows($resql) == 0) {
@@ -68,24 +77,19 @@ if (!$connected) {
 	exit;
 }
 
-$limit_nb = $account->sync_limit_nb ? $account->sync_limit_nb : 500;
-$limit_days = $account->sync_limit_days ? $account->sync_limit_days : 180;
-
-$messages = $client->getMessages($limit_nb, $limit_days);
-
-if ($messages === false) {
-	print json_encode(array('error' => 'Failed to fetch messages: ' . $client->error));
-	$client->close();
-	exit;
-}
+$body = $client->getMessageBody($msgno);
 
 $client->close();
 
-print json_encode(array(
+$json = json_encode(array(
 	'success' => true,
-	'account' => $account->email,
-	'limit_nb' => $limit_nb,
-	'limit_days' => $limit_days,
-	'count' => count($messages),
-	'data' => $messages
-));
+	'body' => $body
+), JSON_INVALID_UTF8_SUBSTITUTE);
+
+if (!$json) {
+	$json = json_encode(array('error' => 'JSON encode failed: ' . json_last_error_msg()));
+}
+
+file_put_contents('c:/wamp64/logs/debug_inbox.txt', "msgno=$msgno, folder=$folder\nJSON:$json\nERROR:" . json_last_error_msg());
+
+print $json;

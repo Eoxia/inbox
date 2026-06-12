@@ -6,6 +6,7 @@
  */
 
 $res = 0;
+if (!defined('FORCE_CKEDITOR')) define('FORCE_CKEDITOR', 1);
 if (!($res && preg_match('/^http/', $res))) {
 	$res = @include '../main.inc.php';
 }
@@ -43,11 +44,8 @@ llxHeader($head, $langs->trans($page_name));
 		<div class="inbox-panel-content">
 			<div class="mailbox-section">
 				<h3>MAILBOXES</h3>
-				<ul class="folder-list">
-					<li class="active"><i class="fa fa-inbox"></i> Inbox <span class="badge">12</span></li>
-					<li><i class="fa fa-paper-plane"></i> Sent</li>
-					<li><i class="fa fa-file"></i> Drafts <span class="badge">2</span></li>
-					<li><i class="fa fa-trash"></i> Trash <span class="badge">5</span></li>
+				<ul class="folder-list" id="dynamic-folder-list">
+					<li class="active"><i class="fa fa-spin fa-spinner"></i> Chargement...</li>
 				</ul>
 			</div>
 		</div>
@@ -107,6 +105,30 @@ llxHeader($head, $langs->trans($page_name));
 			<div class="email-view-body">
 				<p>Hi John, just wanted to give you a quick update on the project. Everything is on track for the Friday deadline.</p>
 			</div>
+			
+			<div id="reply-form-container" style="display: none; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+				<h3 style="margin-bottom: 15px; font-size: 1.1em; color: #1e293b;">Répondre</h3>
+				<div style="margin-bottom: 10px;">
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">À :</label>
+					<input type="text" id="reply-to" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
+				</div>
+				<div style="margin-bottom: 10px;">
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">Cc :</label>
+					<input type="text" id="reply-cc" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
+				</div>
+				<div style="margin-bottom: 15px;">
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">Objet :</label>
+					<input type="text" id="reply-subject" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
+				</div>
+				
+				<!-- CKEditor Textarea -->
+				<textarea id="replybody" name="replybody"></textarea>
+				
+				<div style="margin-top: 15px; text-align: right;">
+					<button class="btn-primary" id="btn-cancel-reply" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 8px 16px; margin-right: 10px; cursor: pointer;">Annuler</button>
+					<button class="btn-primary" id="btn-send-reply" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 3px; cursor: pointer;">Envoyer <i class="fa fa-paper-plane" style="margin-left: 5px;"></i></button>
+				</div>
+			</div>
 		</div>
 	</div>
 
@@ -145,6 +167,12 @@ llxHeader($head, $langs->trans($page_name));
 	</div>
 </div>
 
+<script>
+	var inboxSendDelay = <?php echo isset($conf->global->INBOX_SEND_DELAY) ? (int)$conf->global->INBOX_SEND_DELAY : 10; ?>;
+</script>
+<script type="module" src="<?php echo DOL_URL_ROOT; ?>/custom/inbox/js/app.js"></script>
+
 <?php
 llxFooter();
 $db->close();
+?>

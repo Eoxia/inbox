@@ -35,6 +35,8 @@ class InboxAccount extends CommonObject
 	public $allow_self_signed;
 	public $signature;
 	public $fk_user;
+	public $sync_limit_nb = 500;
+	public $sync_limit_days = 180;
 	public $shared;
 	public $status;
 	public $date_creation;
@@ -66,7 +68,7 @@ class InboxAccount extends CommonObject
 		$sql = "INSERT INTO ".MAIN_DB_PREFIX."inbox_account (";
 		$sql .= "label, email, imap_server, imap_port, imap_security, imap_login, imap_password, ";
 		$sql .= "smtp_server, smtp_port, smtp_security, smtp_login, smtp_password, allow_self_signed, signature, ";
-		$sql .= "fk_user, shared, status, date_creation";
+		$sql .= "fk_user, sync_limit_nb, sync_limit_days, shared, status, date_creation";
 		$sql .= ") VALUES (";
 		$sql .= "'".$this->db->escape($this->label)."',";
 		$sql .= "'".$this->db->escape($this->email)."',";
@@ -83,7 +85,9 @@ class InboxAccount extends CommonObject
 		$sql .= (int) $this->allow_self_signed.",";
 		$sql .= "'".$this->db->escape($this->signature)."',";
 		$sql .= $this->fk_user > 0 ? $this->fk_user : "NULL";
-		$sql .= ",".(int) $this->shared.",";
+		$sql .= ",".(int) $this->sync_limit_nb.",";
+		$sql .= (int) $this->sync_limit_days.",";
+		$sql .= (int) $this->shared.",";
 		$sql .= (int) $this->status.",";
 		$sql .= "'".$this->db->idate(dol_now())."'";
 		$sql .= ")";
@@ -136,6 +140,8 @@ class InboxAccount extends CommonObject
 				$this->allow_self_signed = $obj->allow_self_signed;
 				$this->signature = $obj->signature;
 				$this->fk_user = $obj->fk_user;
+				$this->sync_limit_nb = $obj->sync_limit_nb;
+				$this->sync_limit_days = $obj->sync_limit_days;
 				$this->shared = $obj->shared;
 				$this->status = $obj->status;
 				return 1;

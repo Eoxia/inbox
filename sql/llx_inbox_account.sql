@@ -15,6 +15,8 @@ CREATE TABLE llx_inbox_account(
 	allow_self_signed integer DEFAULT 0,
 	signature text,
 	fk_user integer DEFAULT NULL,
+	sync_limit_nb integer DEFAULT 500,
+	sync_limit_days integer DEFAULT 180,
 	shared integer DEFAULT 0,
 	status integer DEFAULT 1,
 	date_creation datetime,

@@ -23,4 +23,7 @@ Password=Mot de passe
 Active=Actif
 Disabled=Désactivé
 WarningTableNotExists=Attention : Les tables de la base de données n'existent pas. Veuillez désactiver puis réactiver le module pour forcer leur création.
+InboxSyncLimitNb=Nombre maximum d'emails à synchroniser
+InboxSyncLimitDays=Ancienneté maximum (en jours)
+Synchronization=Synchronisation
 TestConnection=Tester la connexion IMAP/SMTP

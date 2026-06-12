@@ -46,6 +46,11 @@ if ($action == 'add') {
 	$account->smtp_login = GETPOST('smtp_login', 'alpha');
 	$account->smtp_password = GETPOST('smtp_password', 'none'); // should be encrypted later
 	
+	$account->sync_limit_nb = GETPOST('sync_limit_nb', 'int');
+	$account->sync_limit_days = GETPOST('sync_limit_days', 'int');
+	if (empty($account->sync_limit_nb)) $account->sync_limit_nb = 500;
+	if (empty($account->sync_limit_days)) $account->sync_limit_days = 180;
+	
 	$account->shared = GETPOST('shared', 'int') ? 1 : 0;
 	$account->status = 1;
 
@@ -151,6 +156,11 @@ if ($action == 'add') {
 	$account->smtp_login = GETPOST('smtp_login', 'alpha');
 	if (GETPOST('smtp_password', 'none') != '') $account->smtp_password = GETPOST('smtp_password', 'none');
 	
+	$account->sync_limit_nb = GETPOST('sync_limit_nb', 'int');
+	$account->sync_limit_days = GETPOST('sync_limit_days', 'int');
+	if (empty($account->sync_limit_nb)) $account->sync_limit_nb = 500;
+	if (empty($account->sync_limit_days)) $account->sync_limit_days = 180;
+	
 	$account->shared = GETPOST('shared', 'int') ? 1 : 0;
 	
 	// Update directly for now (missing update method in class, so we use SQL for quick V1)
@@ -162,6 +172,7 @@ if ($action == 'add') {
 	$sql .= "smtp_server = '".$db->escape($account->smtp_server)."', smtp_port = ".(int)$account->smtp_port.", ";
 	$sql .= "smtp_security = '".$db->escape($account->smtp_security)."', smtp_login = '".$db->escape($account->smtp_login)."', ";
 	$sql .= "smtp_password = '".$db->escape($account->smtp_password)."', ";
+	$sql .= "sync_limit_nb = ".(int)$account->sync_limit_nb.", sync_limit_days = ".(int)$account->sync_limit_days.", ";
 	$sql .= "shared = ".(int)$account->shared." ";
 	$sql .= "WHERE rowid = ".(int)$account->id;
 	
@@ -236,60 +247,89 @@ if ($resql) {
 	}
 }
 print '</table>';
-print '</div>';
 
 if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	// Form to add or edit an account
 	print '<br>';
 	print load_fiche_titre($action == 'edit' ? $langs->trans("EditAccount") : $langs->trans("AddNewAccount"), '', '');
 
-print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
-print '<input type="hidden" name="token" value="'.newToken().'">';
-print '<input type="hidden" name="action" value="'.($action == 'edit' ? 'update' : 'add').'">';
-if ($action == 'edit') {
-	print '<input type="hidden" name="id" value="'.$account->id.'">';
-}
+	print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+	print '<input type="hidden" name="token" value="'.newToken().'">';
+	print '<input type="hidden" name="action" value="'.($action == 'edit' ? 'update' : 'add').'">';
+	if ($action == 'edit') {
+		print '<input type="hidden" name="id" value="'.$account->id.'">';
+	}
+	
+	print '<table class="border centpercent">';
+	// General
+	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("General").'</td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Label").'</td><td><input type="text" name="label" value="'.dol_escape_htmltag($account->label).'" size="40"></td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Email").'</td><td><input type="text" name="email" value="'.dol_escape_htmltag($account->email).'" size="40"></td></tr>';
+	print '<tr><td>'.$langs->trans("Shared").'</td><td><select name="shared"><option value="0"'.($account->shared == 0 ? ' selected' : '').'>'.$langs->trans("No").'</option><option value="1"'.($account->shared == 1 ? ' selected' : '').'>'.$langs->trans("Yes").'</option></select></td></tr>';
+	print '<tr><td>'.$langs->trans("Status").'</td><td><select name="status"><option value="1"'.($account->status == 1 ? ' selected' : '').'>'.$langs->trans("Active").'</option><option value="0"'.($account->status == 0 ? ' selected' : '').'>'.$langs->trans("Inactive").'</option></select></td></tr>';
+	
+	// IMAP
+	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("IMAPConfig").'</td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Server").'</td><td><input type="text" name="imap_server" value="'.($account->imap_server ? dol_escape_htmltag($account->imap_server) : 'imap.').'" size="40"></td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Port").'</td><td><input type="text" name="imap_port" value="'.($account->imap_port ? $account->imap_port : '993').'" size="6"></td></tr>';
+	print '<tr><td>'.$langs->trans("Security").'</td><td><select name="imap_security">';
+	print '<option value="none"'.($account->imap_security == 'none' ? ' selected' : '').'>None</option>';
+	print '<option value="ssl"'.($account->imap_security == 'ssl' ? ' selected' : '').'>SSL/TLS</option>';
+	print '<option value="starttls"'.($account->imap_security == 'starttls' ? ' selected' : '').'>STARTTLS</option>';
+	print '</select></td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Login").'</td><td><input type="text" name="imap_login" value="'.dol_escape_htmltag($account->imap_login).'" size="40"></td></tr>';
+	print '<tr><td class="fieldrequired">'.$langs->trans("Password").'</td><td><input type="password" name="imap_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
 
-print '<table class="border centpercent">';
-// General
-print '<tr><td class="titlefieldcreate fieldrequired">'.$langs->trans("Label").'</td><td><input type="text" name="label" value="'.dol_escape_htmltag($account->label).'" size="40"></td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Email").'</td><td><input type="text" name="email" value="'.dol_escape_htmltag($account->email).'" size="40"></td></tr>';
-print '<tr><td>'.$langs->trans("SharedAccount").'</td><td><input type="checkbox" name="shared" value="1" '.($account->shared ? 'checked' : '').'></td></tr>';
+	// SMTP
+	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("SMTPConfig").'</td></tr>';
+	print '<tr><td>'.$langs->trans("Server").'</td><td><input type="text" name="smtp_server" value="'.($account->smtp_server ? dol_escape_htmltag($account->smtp_server) : 'smtp.').'" size="40"></td></tr>';
+	print '<tr><td>'.$langs->trans("Port").'</td><td><input type="text" name="smtp_port" value="'.($account->smtp_port ? $account->smtp_port : '465').'" size="6"></td></tr>';
+	print '<tr><td>'.$langs->trans("Security").'</td><td><select name="smtp_security">';
+	print '<option value="none"'.($account->smtp_security == 'none' ? ' selected' : '').'>None</option>';
+	print '<option value="ssl"'.($account->smtp_security == 'ssl' ? ' selected' : '').'>SSL/TLS</option>';
+	print '<option value="starttls"'.($account->smtp_security == 'starttls' ? ' selected' : '').'>STARTTLS</option>';
+	print '</select></td></tr>';
+	print '<tr><td>'.$langs->trans("Login").'</td><td><input type="text" name="smtp_login" value="'.dol_escape_htmltag($account->smtp_login).'" size="40"></td></tr>';
+	print '<tr><td>'.$langs->trans("Password").'</td><td><input type="password" name="smtp_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
 
-// IMAP
-print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("IMAPConfig").'</td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Server").'</td><td><input type="text" name="imap_server" value="'.($account->imap_server ? dol_escape_htmltag($account->imap_server) : 'imap.').'" size="40"></td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Port").'</td><td><input type="text" name="imap_port" value="'.($account->imap_port ? $account->imap_port : '993').'" size="6"></td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Security").'</td><td><select name="imap_security">';
-print '<option value="ssl" '.($account->imap_security=='ssl'?'selected':'').'>SSL/TLS</option>';
-print '<option value="starttls" '.($account->imap_security=='starttls'?'selected':'').'>STARTTLS</option>';
-print '<option value="none" '.($account->imap_security=='none'?'selected':'').'>None</option>';
-print '</select></td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Login").'</td><td><input type="text" name="imap_login" value="'.dol_escape_htmltag($account->imap_login).'" size="40"></td></tr>';
-print '<tr><td class="fieldrequired">'.$langs->trans("Password").'</td><td><input type="password" name="imap_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
+	// Sync Limits
+	print '<tr><td colspan="2" class="liste_titre">Limites de synchronisation (IMAP)</td></tr>';
+	print '<tr><td>Nombre max d\'emails à synchroniser</td><td><input type="number" name="sync_limit_nb" value="'.($account->sync_limit_nb ? $account->sync_limit_nb : '500').'" size="6"> <span class="opacitymedium">Défaut: 500</span></td></tr>';
+	print '<tr><td>Ancienneté max en jours</td><td><input type="number" name="sync_limit_days" value="'.($account->sync_limit_days ? $account->sync_limit_days : '180').'" size="6"> <span class="opacitymedium">Défaut: 180 (6 mois)</span></td></tr>';
 
-// SMTP
-print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("SMTPConfig").'</td></tr>';
-print '<tr><td>'.$langs->trans("Server").'</td><td><input type="text" name="smtp_server" value="'.($account->smtp_server ? dol_escape_htmltag($account->smtp_server) : 'smtp.').'" size="40"></td></tr>';
-print '<tr><td>'.$langs->trans("Port").'</td><td><input type="text" name="smtp_port" value="'.($account->smtp_port ? $account->smtp_port : '465').'" size="6"></td></tr>';
-print '<tr><td>'.$langs->trans("Security").'</td><td><select name="smtp_security">';
-print '<option value="ssl" '.($account->smtp_security=='ssl'?'selected':'').'>SSL/TLS</option>';
-print '<option value="starttls" '.($account->smtp_security=='starttls'?'selected':'').'>STARTTLS</option>';
-print '<option value="none" '.($account->smtp_security=='none'?'selected':'').'>None</option>';
-print '</select></td></tr>';
-print '<tr><td>'.$langs->trans("Login").'</td><td><input type="text" name="smtp_login" value="'.dol_escape_htmltag($account->smtp_login).'" size="40"></td></tr>';
-print '<tr><td>'.$langs->trans("Password").'</td><td><input type="password" name="smtp_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
+	print '</table>';
 
-print '</table>';
+	print '<div class="center"><br>';
+	print '<input type="submit" class="button button-save" value="'.($action == 'edit' ? $langs->trans("Save") : $langs->trans("Add")).'">';
+	if ($action == 'edit') {
+		print ' &nbsp; <a href="'.$_SERVER["PHP_SELF"].'" class="button button-cancel">'.$langs->trans("Cancel").'</a>';
+	}
+	print '</div>';
 
-print '<div class="center"><br>';
-print '<input type="submit" class="button button-save" value="'.($action == 'edit' ? $langs->trans("Save") : $langs->trans("Add")).'">';
-if ($action == 'edit') {
-	print ' &nbsp; <a href="'.$_SERVER["PHP_SELF"].'" class="button button-cancel">'.$langs->trans("Cancel").'</a>';
-}
-print '</div>';
+	print '</form>';
+} else {
+	// Only show global params if not editing an account
+	print '<br>';
+	print load_fiche_titre("Paramètres globaux", '', '');
 
-print '</form>';
+	if ($action == 'set_global') {
+		$delay = GETPOST('inbox_send_delay', 'int');
+		dolibarr_set_const($db, 'INBOX_SEND_DELAY', $delay, 'chaine', 0, '', $conf->entity);
+		setEventMessages($langs->trans("RecordSaved"), null, 'mesgs');
+	}
+
+	print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+	print '<input type="hidden" name="token" value="'.newToken().'">';
+	print '<input type="hidden" name="action" value="set_global">';
+
+	print '<table class="border centpercent">';
+	print '<tr><td class="titlefield">Délai d\'annulation d\'envoi (secondes)</td><td>';
+	print '<input type="number" name="inbox_send_delay" value="'.(isset($conf->global->INBOX_SEND_DELAY) ? $conf->global->INBOX_SEND_DELAY : '10').'" size="6">';
+	print ' <span class="opacitymedium">Nombre de secondes avant l\'expédition réelle, permettant d\'annuler l\'envoi (Défaut: 10).</span>';
+	print '</td></tr>';
+	print '</table>';
+	print '<div class="center"><br><input type="submit" class="button button-save" value="'.$langs->trans("Save").'"></div>';
+	print '</form>';
 }
 
 // End of page

@@ -36,7 +36,7 @@ class modInbox extends DolibarrModules
 		// Key used in llx_const table to save module status enabled/disabled (where MYMODULE is value of property name of module in uppercase)
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		// Name of image file used for this module.
-		$this->picto = 'email';
+		$this->picto = 'object_email';
 
 		// Data directories to create when module is enabled
 		$this->dirs = array(
@@ -67,6 +67,7 @@ class modInbox extends DolibarrModules
 				'perms' => '$user->rights->inbox->read',
 				'target' => '',
 				'user' => 2, // 0=Menu for internal users, 1=external users, 2=both
+				'picto' => 'object_email',
 			)
 		);
 

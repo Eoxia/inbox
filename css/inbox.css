@@ -19,18 +19,27 @@
 	--tag-green-text: #15803d;
 }
 
-#id-right { /* Override Dolibarr default padding for full height app */
+#id-right, .fiche { /* Override Dolibarr default padding for full height app */
 	padding: 0 !important;
+	margin: 0 !important;
 	height: calc(100vh - 50px);
 }
 
+#id-left {
+	display: none !important;
+}
+
 .inbox-container {
+	position: fixed;
+	top: 50px; /* Dolibarr top menu height */
+	left: 0;
+	right: 0;
+	bottom: 0;
 	display: flex;
-	height: 100%;
-	width: 100%;
 	background-color: var(--inbox-bg);
 	font-family: 'Inter', 'Segoe UI', sans-serif;
 	overflow: hidden;
+	z-index: 900;
 }
 
 .inbox-panel {

@@ -1,8 +1,8 @@
 <?php
 /**
- *	\file       ajax/get_emails.php
+ *	\file       ajax/get_folders.php
  *	\ingroup    inbox
- *	\brief      Ajax endpoint to retrieve emails
+ *	\brief      Ajax endpoint to retrieve IMAP folders
  */
 
 $res = 0;
@@ -29,12 +29,11 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
-// Find first active account for the user or shared
+// Find first active account
 $sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
 $resql = $db->query($sql);
 
 if (!$resql || $db->num_rows($resql) == 0) {
-	// Fallback: try to find ANY active account if none specific to user (for initial testing)
 	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
 	$resql = $db->query($sql);
 	if (!$resql || $db->num_rows($resql) == 0) {
@@ -48,19 +47,13 @@ $obj = $db->fetch_object($resql);
 $account = new InboxAccount($db);
 $account->fetch($obj->rowid);
 
-$folder = GETPOST('folder', 'restricthtml');
-if (empty($folder)) {
-	$folder = 'INBOX';
-}
-
 $client = new IMAPClient();
 $connected = $client->connect(
 	$account->imap_server, 
 	$account->imap_port, 
 	$account->imap_security, 
 	$account->imap_login, 
-	$account->imap_password,
-	$folder
+	$account->imap_password
 );
 
 if (!$connected) {
@@ -68,24 +61,10 @@ if (!$connected) {
 	exit;
 }
 
-$limit_nb = $account->sync_limit_nb ? $account->sync_limit_nb : 500;
-$limit_days = $account->sync_limit_days ? $account->sync_limit_days : 180;
-
-$messages = $client->getMessages($limit_nb, $limit_days);
-
-if ($messages === false) {
-	print json_encode(array('error' => 'Failed to fetch messages: ' . $client->error));
-	$client->close();
-	exit;
-}
-
+$folders = $client->getFolders();
 $client->close();
 
 print json_encode(array(
 	'success' => true,
-	'account' => $account->email,
-	'limit_nb' => $limit_nb,
-	'limit_days' => $limit_days,
-	'count' => count($messages),
-	'data' => $messages
+	'data' => $folders
 ));
