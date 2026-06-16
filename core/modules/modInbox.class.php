@@ -24,7 +24,7 @@ class modInbox extends DolibarrModules
 		$this->numero = 104500;
 		// Key text used to identify module (for permissions, menus, etc...)
 		$this->rights_class = 'inbox';
-		
+
 		// Family can be 'crm','financial','hr','projects','products','ecm','technic','other'
 		$this->family = 'crm';
 		// Module label (no space allowed), used if translation string 'ModuleXXXName' not found (where XXX is value of numeric property 'numero' of module)
@@ -114,6 +114,12 @@ class modInbox extends DolibarrModules
 	 */
 	public function init($options = '')
 	{
+		$result = $this->_load_tables('/inbox/sql/');
+		if ($result < 0) {
+			// Do not activate module if error 'not allowed' returned when loading module SQL queries
+			// (the _load_table run sql with run_sql with the error allowed parameter set to 'default')
+			return -1;
+		}
 		$sql = array();
 		return $this->_init($sql, $options);
 	}
