@@ -88,9 +88,9 @@ dol_syslog($conn_string, LOG_NOTICE);
 			return array('messages' => array(), 'total' => 0, 'has_more' => false);
 		}
 
-		// Sort by newest first, then apply account cap
+		// Sort by newest first; limit_nb is no longer used to cap the pool
+		// since pagination (offset/page_size) already controls per-request loading.
 		rsort($emails);
-		$emails = array_slice($emails, 0, $limit_nb);
 		$total = count($emails);
 
 		// Paginate
