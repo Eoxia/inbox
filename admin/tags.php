@@ -70,8 +70,7 @@ if ($action === 'delete' && $rowid) {
 
 // ── View ─────────────────────────────────────────────────────────────────────
 
-$extrahead = '<link rel="stylesheet" type="text/css" href="'.DOL_URL_ROOT.'/custom/inbox/css/inbox.css">';
-llxHeader($extrahead, $langs->trans("InboxTags"));
+llxHeader('', $langs->trans("InboxTags"));
 
 $linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.$langs->trans("BackToModuleList").'</a>';
 print load_fiche_titre($langs->trans("InboxSetup"), $linkback, 'title_setup');
