@@ -22,11 +22,24 @@ if (empty($user->rights->inbox->setup)) accessforbidden();
 $action = GETPOST('action', 'aZ09');
 $rowid  = (int) GETPOST('rowid', 'int');
 
+/**
+ * Validate and sanitize a hex color string.
+ *
+ * @param  string $raw     Raw value from GETPOST
+ * @param  string $default Fallback color
+ * @return string          Validated hex color
+ */
+function inboxSanitizeColor($raw, $default = '#3b82f6')
+{
+	$c = trim((string) $raw);
+	return preg_match('/^#[0-9a-fA-F]{6}$/', $c) ? strtolower($c) : $default;
+}
+
 // ── Actions ──────────────────────────────────────────────────────────────────
 
 if ($action === 'add') {
 	$label   = trim(GETPOST('label', 'alphanohtml'));
-	$color   = GETPOST('color', 'aZ09arobase') ?: '#3b82f6';
+	$color   = inboxSanitizeColor(GETPOST('color', 'none'));
 	$keyword = trim(GETPOST('imap_keyword', 'aZ09'));
 
 	if ($label) {
@@ -48,7 +61,7 @@ if ($action === 'update' && $rowid) {
 	$t = new InboxTag($db);
 	$t->fetch($rowid);
 	$t->label        = trim(GETPOST('label', 'alphanohtml'));
-	$t->color        = GETPOST('color', 'aZ09arobase') ?: '#3b82f6';
+	$t->color        = inboxSanitizeColor(GETPOST('color', 'none'));
 	$keyword         = trim(GETPOST('imap_keyword', 'aZ09'));
 	$t->imap_keyword = $keyword ?: null;
 	if ($t->update($user) < 0) {
