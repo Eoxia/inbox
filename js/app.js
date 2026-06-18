@@ -295,8 +295,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
 			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE);
 
-		// Remember which email was selected before clearing, so we can restore the highlight
-		const previousUid = currentEmail ? currentEmail.uid : null;
+		// Snapshot the ordered UIDs and selected UID before clearing
+		const previousUid  = currentEmail ? String(currentEmail.uid) : null;
+		const previousUids = Array.from(container.querySelectorAll('.email-item[data-uid]'))
+			.map(el => el.dataset.uid);
 
 		const resetUI = () => {
 			if (syncIcon) syncIcon.classList.remove('fa-spin');
@@ -343,12 +345,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
 				if (folderSwitch && data.data && data.data.length > 0) {
 					// Folder switch: auto-select first email
-					const firstItem = container.querySelector('.email-item');
-					if (firstItem) firstItem.click();
-				} else if (!folderSwitch && previousUid) {
-					// Same-folder refresh: restore the active highlight without re-opening the email
-					const prevItem = container.querySelector(`.email-item[data-uid="${previousUid}"]`);
-					if (prevItem) prevItem.classList.add('active');
+					container.querySelector('.email-item')?.click();
+				} else if (!folderSwitch) {
+					const allItems = Array.from(container.querySelectorAll('.email-item'));
+					const prevItem = previousUid
+						? container.querySelector(`.email-item[data-uid="${previousUid}"]`)
+						: null;
+
+					if (prevItem) {
+						// Email still present: restore highlight silently (no re-open)
+						prevItem.classList.add('active');
+					} else if (allItems.length > 0) {
+						// Email gone: find the nearest neighbor from the old ordered list
+						const prevIndex = previousUids.indexOf(previousUid);
+						const newUidSet = new Set(allItems.map(el => el.dataset.uid));
+						let candidate = null;
+
+						// Search forward from old position
+						for (let i = prevIndex + 1; i < previousUids.length && !candidate; i++) {
+							if (newUidSet.has(previousUids[i])) candidate = previousUids[i];
+						}
+						// Then backward
+						for (let i = prevIndex - 1; i >= 0 && !candidate; i--) {
+							if (newUidSet.has(previousUids[i])) candidate = previousUids[i];
+						}
+
+						const target = candidate
+							? container.querySelector(`.email-item[data-uid="${candidate}"]`)
+							: allItems[0];
+						if (target) target.click();
+					} else {
+						// List is now empty: clear the view panel
+						currentEmail = null;
+						currentEmailBody = '';
+						document.getElementById('panel-view').style.display = 'none';
+					}
 				}
 			})
 			.catch(err => {
