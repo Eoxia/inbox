@@ -59,12 +59,14 @@ document.addEventListener('DOMContentLoaded', () => {
 						document.querySelectorAll('#dynamic-folder-list li').forEach(el => el.classList.remove('active'));
 						li.classList.add('active');
 						currentFolder = f.id;
-						
-						// Clear view
-						document.getElementById('email-empty-state').style.display = 'block';
-						document.getElementById('email-view-content').style.display = 'none';
+
+						// Clear view (elements may not exist depending on current state)
+						const emptyState = document.getElementById('email-empty-state');
+						const viewContent = document.getElementById('email-view-content');
+						if (emptyState) emptyState.style.display = 'block';
+						if (viewContent) viewContent.style.display = 'none';
 						document.getElementById('reply-form-container').style.display = 'none';
-						
+
 						fetchEmails();
 					});
 					

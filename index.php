@@ -170,8 +170,6 @@ llxHeader($head, $langs->trans($page_name));
 <script>
 	var inboxSendDelay = <?php echo isset($conf->global->INBOX_SEND_DELAY) ? (int)$conf->global->INBOX_SEND_DELAY : 10; ?>;
 </script>
-<script type="module" src="<?php echo DOL_URL_ROOT; ?>/custom/inbox/js/app.js"></script>
-
 <?php
 llxFooter();
 $db->close();
