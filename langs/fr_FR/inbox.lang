@@ -27,3 +27,5 @@ InboxSyncLimitNb=Nombre maximum d'emails à synchroniser
 InboxSyncLimitDays=Ancienneté maximum (en jours)
 Synchronization=Synchronisation
 TestConnection=Tester la connexion IMAP/SMTP
+InboxAccounts=Boîtes emails
+InboxTags=Tags

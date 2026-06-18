@@ -38,6 +38,7 @@ if (!$res) {
 }
 
 dol_include_once('/inbox/class/inboxaccount.class.php');
+dol_include_once('/inbox/lib/inbox.lib.php');
 
 global $langs, $user, $conf, $db;
 
@@ -217,6 +218,9 @@ llxHeader('', $langs->trans($page_name));
 $linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.$langs->trans("BackToModuleList").'</a>';
 print load_fiche_titre($langs->trans($page_name), $linkback, 'title_setup');
 
+$head = adminInboxPrepareHead();
+print dol_get_fiche_head($head, 'accounts', '', -1, 'fa-envelope');
+
 print '<div class="info">'.$langs->trans("InboxSetupPageDesc").'</div>';
 
 // List of accounts
@@ -358,6 +362,8 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<div class="center"><br><input type="submit" class="button button-save" value="'.$langs->trans("Save").'"></div>';
 	print '</form>';
 }
+
+print dol_get_fiche_end();
 
 // End of page
 llxFooter();

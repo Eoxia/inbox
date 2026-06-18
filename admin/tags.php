@@ -11,6 +11,7 @@ if (!($res && preg_match('/^http/', $res))) $res = @include '../../../main.inc.p
 if (!$res) die("Include of main fails");
 
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxtag.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/lib/inbox.lib.php';
 
 global $db, $user, $conf, $langs;
 
@@ -69,10 +70,14 @@ if ($action === 'delete' && $rowid) {
 
 // ── View ─────────────────────────────────────────────────────────────────────
 
-$head = '<link rel="stylesheet" type="text/css" href="'.DOL_URL_ROOT.'/custom/inbox/css/inbox.css">';
-llxHeader($head, "Gestion des tags Inbox");
+$extrahead = '<link rel="stylesheet" type="text/css" href="'.DOL_URL_ROOT.'/custom/inbox/css/inbox.css">';
+llxHeader($extrahead, $langs->trans("InboxTags"));
 
-print load_fiche_titre("Tags de messagerie", '', 'fa-tag');
+$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.$langs->trans("BackToModuleList").'</a>';
+print load_fiche_titre($langs->trans("InboxSetup"), $linkback, 'title_setup');
+
+$head = adminInboxPrepareHead();
+print dol_get_fiche_head($head, 'tags', '', -1, 'fa-envelope');
 
 // Edit form (shown when action=edit)
 $editing = null;
@@ -140,6 +145,8 @@ foreach ($tags as $t) {
 }
 
 print '</table>';
+
+print dol_get_fiche_end();
 
 llxFooter();
 $db->close();
