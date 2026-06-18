@@ -221,18 +221,20 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 	};
 
-	// Add sentinel for infinite scroll at the bottom of the email list
+	// Add sentinel div so the loader always appears at the bottom
 	const emailSentinel = document.createElement('div');
 	emailSentinel.id = 'email-list-sentinel';
-	emailSentinel.style.height = '10px';
+	emailSentinel.style.height = '1px';
 	document.getElementById('email-list-container').appendChild(emailSentinel);
 
-	const scrollObserver = new IntersectionObserver((entries) => {
-		if (entries[0].isIntersecting && !emailsLoading && emailsHasMore) {
+	// Infinite scroll: fire when user is within 100px of the bottom of the list
+	document.getElementById('email-list-container').addEventListener('scroll', () => {
+		if (emailsLoading || !emailsHasMore) return;
+		const el = document.getElementById('email-list-container');
+		if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
 			fetchEmails(false);
 		}
-	}, { threshold: 0.1 });
-	scrollObserver.observe(emailSentinel);
+	});
 
 	// Trigger fetch on load
 	fetchFolders();
