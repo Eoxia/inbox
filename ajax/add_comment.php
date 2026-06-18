@@ -25,7 +25,7 @@ header('Content-Type: application/json');
 
 $uid        = (int) GETPOST('uid', 'int');
 $folder     = GETPOST('folder', 'restricthtml') ?: 'INBOX';
-$message_id = trim(GETPOST('message_id', 'restricthtml'));
+$message_id = trim(GETPOST('message_id', 'alphawithlgt'));
 $comment    = trim(GETPOST('comment', 'restricthtml'));
 
 if (!$uid)      { print json_encode(array('error' => 'Missing uid'));     exit; }

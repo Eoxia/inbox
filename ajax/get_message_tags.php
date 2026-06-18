@@ -23,7 +23,7 @@ if (empty($user->rights->inbox->read)) { print json_encode(array('error' => 'Acc
 
 header('Content-Type: application/json');
 
-$message_id = GETPOST('message_id', 'san');
+$message_id = GETPOST('message_id', 'alphawithlgt');
 if (!$message_id) { print json_encode(array('error' => 'Missing message_id')); exit; }
 
 // Resolve account

@@ -26,7 +26,7 @@ if (empty($user->rights->inbox->read)) { print json_encode(array('error' => 'Acc
 header('Content-Type: application/json');
 
 $fk_tag      = (int) GETPOST('fk_tag', 'int');
-$message_id  = GETPOST('message_id', 'san');
+$message_id  = GETPOST('message_id', 'alphawithlgt');
 $message_uid = (int) GETPOST('uid', 'int');
 $folder      = GETPOST('folder', 'restricthtml') ?: 'INBOX';
 
