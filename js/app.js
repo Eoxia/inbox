@@ -275,6 +275,12 @@ document.addEventListener('DOMContentLoaded', () => {
 					scrollObserver.unobserve(emailSentinel);
 					if (emailsHasMore) scrollObserver.observe(emailSentinel);
 				}
+
+				// On folder switch (reset), auto-select the first email
+				if (reset && data.data && data.data.length > 0) {
+					const firstItem = container.querySelector('.email-item');
+					if (firstItem) firstItem.click();
+				}
 			})
 			.catch(err => {
 				emailsLoading = false;
