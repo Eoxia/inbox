@@ -162,6 +162,23 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Trigger fetch on load
 	fetchFolders();
 
+	// Wire up the manual refresh button
+	const btnSync = document.querySelector('.inbox-panel-header .fa-sync');
+	if (btnSync) {
+		btnSync.parentElement.addEventListener('click', () => fetchEmails());
+	}
+
+	// Auto-refresh: reload email list at the configured interval (skip if composing)
+	const refreshInterval = typeof inboxRefreshInterval !== 'undefined' ? inboxRefreshInterval : 0;
+	if (refreshInterval > 0) {
+		setInterval(() => {
+			const replyOpen = document.getElementById('reply-form-container').style.display !== 'none';
+			if (!replyOpen) {
+				fetchEmails();
+			}
+		}, refreshInterval * 1000);
+	}
+
 	// Reply logic
 	const btnReply = document.querySelector('.header-actions .fa-reply').parentElement;
 	if (btnReply) {

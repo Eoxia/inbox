@@ -336,6 +336,8 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	if ($action == 'set_global') {
 		$delay = GETPOST('inbox_send_delay', 'int');
 		dolibarr_set_const($db, 'INBOX_SEND_DELAY', $delay, 'chaine', 0, '', $conf->entity);
+		$refresh = GETPOST('inbox_refresh_interval', 'int');
+		dolibarr_set_const($db, 'INBOX_REFRESH_INTERVAL', max(0, $refresh), 'chaine', 0, '', $conf->entity);
 		setEventMessages($langs->trans("RecordSaved"), null, 'mesgs');
 	}
 
@@ -345,8 +347,12 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 
 	print '<table class="border centpercent">';
 	print '<tr><td class="titlefield">Délai d\'annulation d\'envoi (secondes)</td><td>';
-	print '<input type="number" name="inbox_send_delay" value="'.(isset($conf->global->INBOX_SEND_DELAY) ? $conf->global->INBOX_SEND_DELAY : '10').'" size="6">';
+	print '<input type="number" name="inbox_send_delay" value="'.getDolGlobalInt('INBOX_SEND_DELAY', 10).'" min="0" size="6">';
 	print ' <span class="opacitymedium">Nombre de secondes avant l\'expédition réelle, permettant d\'annuler l\'envoi (Défaut: 10).</span>';
+	print '</td></tr>';
+	print '<tr><td class="titlefield">Intervalle d\'actualisation automatique (secondes)</td><td>';
+	print '<input type="number" name="inbox_refresh_interval" value="'.getDolGlobalInt('INBOX_REFRESH_INTERVAL', 0).'" min="0" size="6">';
+	print ' <span class="opacitymedium">Rafraîchissement automatique de la liste des emails. 0 = désactivé (Défaut: 0).</span>';
 	print '</td></tr>';
 	print '</table>';
 	print '<div class="center"><br><input type="submit" class="button button-save" value="'.$langs->trans("Save").'"></div>';

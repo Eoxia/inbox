@@ -101,11 +101,11 @@ llxHeader($head, $langs->trans($page_name));
 				</div>
 				<div class="email-view-date">31 mars 2026, 11:00</div>
 			</div>
-			
+
 			<div class="email-view-body">
 				<p>Hi John, just wanted to give you a quick update on the project. Everything is on track for the Friday deadline.</p>
 			</div>
-			
+
 			<div id="reply-form-container" style="display: none; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
 				<h3 style="margin-bottom: 15px; font-size: 1.1em; color: #1e293b;">Répondre</h3>
 				<div style="margin-bottom: 10px;">
@@ -120,10 +120,10 @@ llxHeader($head, $langs->trans($page_name));
 					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">Objet :</label>
 					<input type="text" id="reply-subject" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
 				</div>
-				
+
 				<!-- CKEditor Textarea -->
 				<textarea id="replybody" name="replybody"></textarea>
-				
+
 				<div style="margin-top: 15px; text-align: right;">
 					<button class="btn-primary" id="btn-cancel-reply" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 8px 16px; margin-right: 10px; cursor: pointer;">Annuler</button>
 					<button class="btn-primary" id="btn-send-reply" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 3px; cursor: pointer;">Envoyer <i class="fa fa-paper-plane" style="margin-left: 5px;"></i></button>
@@ -168,9 +168,9 @@ llxHeader($head, $langs->trans($page_name));
 </div>
 
 <script>
-	var inboxSendDelay = <?php echo isset($conf->global->INBOX_SEND_DELAY) ? (int)$conf->global->INBOX_SEND_DELAY : 10; ?>;
+	var inboxSendDelay = <?php echo getDolGlobalInt('INBOX_SEND_DELAY', 10); ?>;
+	var inboxRefreshInterval = <?php echo getDolGlobalInt('INBOX_REFRESH_INTERVAL', 0); ?>;
 </script>
 <?php
 llxFooter();
 $db->close();
-?>
