@@ -32,23 +32,24 @@ class IMAPClient
 		}
 
 		$conn_string = "{" . $host . ":" . $port . "/imap";
-		
+
 		if ($security == 'ssl') {
 			$conn_string .= "/ssl";
 		} elseif ($security == 'starttls' || $security == 'tls') {
 			$conn_string .= "/tls";
 		}
-		
+
 		// Add /novalidate-cert for typical dev environments, though not ideal for strict prod
-		$conn_string .= "/novalidate-cert}";
+		// $conn_string .= "/novalidate-cert";
+		$conn_string .= "}";
 		$this->conn_string_base = $conn_string;
-		
+
 		// Map simple names to standard IMAP folder encoding if needed
 		if (strtoupper($folder) != 'INBOX') {
 			// Convert encoding to modified UTF-7 for IMAP folder names
 			$folder = imap_utf7_encode($folder);
 		}
-		
+dol_syslog($conn_string, LOG_NOTICE);
 		$conn_string .= $folder;
 
 		// Clear previous errors
@@ -58,6 +59,7 @@ class IMAPClient
 
 		if (!$this->mbox) {
 			$errors = imap_errors();
+
 			$this->error = "Failed to connect to IMAP server. " . ($errors ? implode(', ', $errors) : "Unknown error");
 			return false;
 		}
@@ -94,7 +96,7 @@ class IMAPClient
 		$emails = array_slice($emails, 0, $limit_nb);
 
 		$result = array();
-		
+
 		// Fetch overviews
 		$sequence = implode(',', $emails);
 		$overviews = imap_fetch_overview($this->mbox, $sequence, 0);
@@ -104,24 +106,24 @@ class IMAPClient
 				$item = new stdClass();
 				$item->uid = $overview->uid;
 				$item->msgno = $overview->msgno;
-				
+
 				// Decode subject (can be encoded in UTF-8 or ISO-8859-1)
 				$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
 				$item->subject = $this->decodeMimeHeader($subject);
-				
+
 				// Decode sender
 				$from = isset($overview->from) ? $overview->from : '';
 				$item->from = $this->decodeMimeHeader($from);
-				
+
 				$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
 				$item->seen = (isset($overview->seen) && $overview->seen) ? 1 : 0;
 				$item->recent = (isset($overview->recent) && $overview->recent) ? 1 : 0;
 				$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
 				$item->deleted = (isset($overview->deleted) && $overview->deleted) ? 1 : 0;
-				
+
 				// Optional snippet? Could fetch a small body part here, but it's slow.
 				// We'll leave it empty and fetch on demand, or fetch first 100 bytes.
-				$item->snippet = ''; 
+				$item->snippet = '';
 
 				$result[] = $item;
 			}
@@ -137,10 +139,10 @@ class IMAPClient
 
 	/**
 	 * Decode MIME headers
-	 * @param string $string 
+	 * @param string $string
 	 * @return string
 	 */
-	private function decodeMimeHeader($string) 
+	private function decodeMimeHeader($string)
 	{
 		$decoded = '';
 		$elements = imap_mime_header_decode($string);
@@ -171,19 +173,19 @@ class IMAPClient
 
 		$structure = @imap_fetchstructure($this->mbox, $msgno);
 		$body = $this->getPart($this->mbox, $msgno, "TEXT/HTML", $structure);
-		
+
 		if (empty($body)) {
 			$body = $this->getPart($this->mbox, $msgno, "TEXT/PLAIN", $structure);
 			if ($body) {
 				$body = nl2br(htmlspecialchars($body));
 			}
 		}
-		
+
 		if (empty($body)) {
 			// Fallback
 			$body = @imap_body($this->mbox, $msgno);
 		}
-		
+
 		return $body;
 	}
 
@@ -195,7 +197,7 @@ class IMAPClient
 		if (!$structure) return false;
 
 		$prefix = ($partNumber ? $partNumber . "." : "");
-		
+
 		if ($structure->type == 1) { // MULTIPART
 			foreach ($structure->parts as $index => $subStruct) {
 				$partNum = $prefix . ($index + 1);
@@ -235,7 +237,7 @@ class IMAPClient
 		} elseif ($encoding == 3) {
 			$body = base64_decode($body);
 		}
-		
+
 		$charset = 'UTF-8';
 		if ($parameters) {
 			foreach ($parameters as $p) {
@@ -245,11 +247,11 @@ class IMAPClient
 				}
 			}
 		}
-		
+
 		if (strtolower($charset) != 'utf-8') {
 			$body = @mb_convert_encoding($body, 'UTF-8', $charset);
 		}
-		
+
 		return $body;
 	}
 
@@ -260,15 +262,23 @@ class IMAPClient
 	public function getFolders()
 	{
 		if (!$this->mbox) return array();
-		
+
 		$mailboxes = imap_getmailboxes($this->mbox, $this->conn_string_base, "*");
 		$folders = array();
-		
+
 		if (is_array($mailboxes)) {
 			foreach ($mailboxes as $mailbox) {
 				$name = str_replace($this->conn_string_base, '', $mailbox->name);
-				$cleanName = imap_utf7_decode($name);
-				
+				// imap_utf7_decode can return invalid UTF-8 on certain PHP/c-client versions.
+				// Convert IMAP modified UTF-7 (&...-) to standard UTF-7 (+...-) then use mb_convert_encoding.
+				$utf7std = preg_replace_callback('/&([^-]*)-/', function ($m) {
+					return $m[1] === '' ? '&' : '+' . $m[1] . '-';
+				}, $name);
+				$cleanName = @mb_convert_encoding($utf7std, 'UTF-8', 'UTF-7');
+				if ($cleanName === false || !mb_check_encoding($cleanName, 'UTF-8')) {
+					$cleanName = mb_scrub($name);
+				}
+
 				// Standardize icon/type mapping based on common names
 				$type = 'folder';
 				$lower = strtolower($cleanName);
@@ -278,13 +288,13 @@ class IMAPClient
 				elseif (strpos($lower, 'trash') !== false || strpos($lower, 'corbeille') !== false) $type = 'trash';
 				elseif (strpos($lower, 'spam') !== false || strpos($lower, 'junk') !== false || strpos($lower, 'pourriel') !== false) $type = 'spam';
 				elseif (strpos($lower, 'archive') !== false) $type = 'archive';
-				
+
 				// Clean display name
 				// Remove "INBOX." prefix if present
 				if (stripos($cleanName, 'INBOX.') === 0) {
 					$cleanName = substr($cleanName, 6);
 				}
-				
+
 				// Translate standard names
 				if ($type == 'inbox' && strtolower($cleanName) == 'inbox') $cleanName = 'Boîte de réception';
 				elseif ($type == 'sent' && strtolower($cleanName) == 'sent') $cleanName = 'Envoyés';
@@ -292,14 +302,14 @@ class IMAPClient
 				elseif ($type == 'trash' && strtolower($cleanName) == 'trash') $cleanName = 'Corbeille';
 				elseif ($type == 'spam' && (strtolower($cleanName) == 'spam' || strtolower($cleanName) == 'junk')) $cleanName = 'Pourriel';
 				elseif ($type == 'archive' && strtolower($cleanName) == 'archive') $cleanName = 'Archivé';
-				
+
 				$folders[] = array(
 					'id' => $name,
 					'name' => $cleanName,
 					'type' => $type
 				);
 			}
-			
+
 			// Sort folders: Inbox, Sent, Drafts, then others
 			usort($folders, function($a, $b) {
 				$order = array(
@@ -311,17 +321,17 @@ class IMAPClient
 					'trash' => 6,
 					'folder' => 10
 				);
-				
+
 				$weightA = isset($order[$a['type']]) ? $order[$a['type']] : 10;
 				$weightB = isset($order[$b['type']]) ? $order[$b['type']] : 10;
-				
+
 				if ($weightA == $weightB) {
 					return strcasecmp($a['name'], $b['name']);
 				}
 				return $weightA - $weightB;
 			});
 		}
-		
+
 		return $folders;
 	}
 
@@ -334,9 +344,9 @@ class IMAPClient
 	public function appendMessage($folder, $message)
 	{
 		if (!$this->mbox) return false;
-		
+
 		$targetBox = $this->conn_string_base . imap_utf7_encode($folder);
-		
+
 		// \Seen flag sets the message as read in the Sent folder
 		if (imap_append($this->mbox, $targetBox, $message, "\\Seen")) {
 			return true;

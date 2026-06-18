@@ -4,7 +4,13 @@
  *	\ingroup    inbox
  *	\brief      Ajax endpoint to retrieve IMAP folders
  */
-
+if (!defined('NOTOKENRENEWAL')) {
+	// Disables token renewal
+	define('NOTOKENRENEWAL', 1);
+}
+if (!defined('NOREQUIREMENU')) {
+	define('NOREQUIREMENU', '1');
+}
 $res = 0;
 if (!($res && preg_match('/^http/', $res))) {
 	$res = @include '../../main.inc.php';
@@ -49,10 +55,10 @@ $account->fetch($obj->rowid);
 
 $client = new IMAPClient();
 $connected = $client->connect(
-	$account->imap_server, 
-	$account->imap_port, 
-	$account->imap_security, 
-	$account->imap_login, 
+	$account->imap_server,
+	$account->imap_port,
+	$account->imap_security,
+	$account->imap_login,
 	$account->imap_password
 );
 
@@ -64,7 +70,12 @@ if (!$connected) {
 $folders = $client->getFolders();
 $client->close();
 
-print json_encode(array(
+$json = json_encode(array(
 	'success' => true,
 	'data' => $folders
 ));
+if ($json === false) {
+	print json_encode(array('error' => 'JSON encoding failed: ' . json_last_error_msg()));
+	exit;
+}
+print $json;
