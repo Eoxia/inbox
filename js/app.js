@@ -134,8 +134,20 @@ document.addEventListener('DOMContentLoaded', () => {
 						bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur lors du chargement du corps: ' + bodyData.error + '</div>';
 						currentEmailBody = '';
 					} else {
-						bodyContainer.innerHTML = bodyData.body;
 						currentEmailBody = bodyData.body;
+						// Render HTML email in an isolated iframe to prevent CSS/JS conflicts
+						const iframe = document.createElement('iframe');
+						iframe.style.cssText = 'width:100%; border:none; display:block; min-height:200px;';
+						iframe.setAttribute('sandbox', 'allow-same-origin allow-popups');
+						bodyContainer.innerHTML = '';
+						bodyContainer.appendChild(iframe);
+						iframe.srcdoc = bodyData.body;
+						iframe.addEventListener('load', () => {
+							try {
+								const h = iframe.contentDocument.documentElement.scrollHeight;
+								iframe.style.height = Math.max(200, h) + 'px';
+							} catch (e) {}
+						});
 					}
 					// Render attachment list
 					if (bodyData.attachments && bodyData.attachments.length > 0) {
