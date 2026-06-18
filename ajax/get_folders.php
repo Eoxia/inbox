@@ -11,6 +11,9 @@ if (!defined('NOTOKENRENEWAL')) {
 if (!defined('NOREQUIREMENU')) {
 	define('NOREQUIREMENU', '1');
 }
+if (!defined('NOCSRFCHECK')) {
+	define('NOCSRFCHECK', '1');
+}
 $res = 0;
 if (!($res && preg_match('/^http/', $res))) {
 	$res = @include '../../main.inc.php';
