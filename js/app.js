@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			// Clear previous attachment list and comments
 			const existingAttachBar = document.getElementById('email-attachment-bar');
 			if (existingAttachBar) existingAttachBar.remove();
-			loadComments(email.uid, currentFolder);
+			loadComments(email.uid, currentFolder, email.message_id);
 
 			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder))
 				.then(res => {
@@ -566,10 +566,13 @@ document.addEventListener('DOMContentLoaded', () => {
 		return div;
 	};
 
-	const loadComments = (uid, folder) => {
+	const loadComments = (uid, folder, message_id) => {
 		if (!commentsList) return;
 		commentsList.innerHTML = '<div style="color:#94a3b8;font-size:0.85em;padding:8px 0;">Chargement...</div>';
-		fetch('../../custom/inbox/ajax/get_comments.php?uid=' + encodeURIComponent(uid) + '&folder=' + encodeURIComponent(folder))
+		const url = '../../custom/inbox/ajax/get_comments.php?uid=' + encodeURIComponent(uid)
+			+ '&folder=' + encodeURIComponent(folder)
+			+ (message_id ? '&message_id=' + encodeURIComponent(message_id) : '');
+		fetch(url)
 			.then(r => r.json())
 			.then(data => {
 				commentsList.innerHTML = '';
@@ -589,6 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			fd.append('uid',    currentEmail.uid);
 			fd.append('folder', currentFolder);
 			fd.append('comment', text);
+			if (currentEmail.message_id) fd.append('message_id', currentEmail.message_id);
 
 			commentBtn.disabled = true;
 			fetch('../../custom/inbox/ajax/add_comment.php', { method: 'POST', body: fd })

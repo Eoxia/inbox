@@ -105,7 +105,8 @@ dol_syslog($conn_string, LOG_NOTICE);
 			if ($overviews) {
 				foreach ($overviews as $overview) {
 					$item = new stdClass();
-					$item->uid = $overview->uid;
+					$item->uid        = $overview->uid;
+					$item->message_id = isset($overview->message_id) ? trim($overview->message_id) : '';
 
 					$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
 					$item->subject = $this->decodeMimeHeader($subject);

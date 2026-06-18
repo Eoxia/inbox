@@ -67,25 +67,37 @@ class InboxComment extends CommonObject
 	}
 
 	/**
-	 * Fetch all active comments for an email, newest last
+	 * Fetch all active comments for an email, newest last.
+	 * Searches by message_id when provided (stable across folder moves),
+	 * falls back to (fk_account, message_uid) for legacy rows without message_id.
+	 *
 	 * @param  int    $fk_account
-	 * @param  string $folder
+	 * @param  string $folder       Stored for info only, not used for filtering
 	 * @param  int    $message_uid
 	 * @param  int    $entity
+	 * @param  string $message_id   RFC 2822 Message-ID header (preferred key)
 	 * @return array  of InboxComment objects, or empty array
 	 */
-	public function fetchByMessage($fk_account, $folder, $message_uid, $entity = 1)
+	public function fetchByMessage($fk_account, $folder, $message_uid, $entity = 1, $message_id = '')
 	{
+		if (!empty($message_id)) {
+			$where = "c.fk_account = ".((int)$fk_account)."
+			  AND c.message_id = '".$this->db->escape($message_id)."'
+			  AND c.entity = ".((int)$entity)."
+			  AND c.status = 1";
+		} else {
+			$where = "c.fk_account = ".((int)$fk_account)."
+			  AND c.message_uid = ".((int)$message_uid)."
+			  AND c.entity = ".((int)$entity)."
+			  AND c.status = 1";
+		}
+
 		$sql = "SELECT c.rowid, c.entity, c.fk_account, c.folder, c.message_uid, c.message_id,
 				c.comment, c.status, c.fk_user_creat, c.fk_user_modif, c.date_creation, c.tms,
 				u.login AS user_login, u.firstname AS user_firstname, u.lastname AS user_lastname
 			FROM ".MAIN_DB_PREFIX."inbox_comment c
 			LEFT JOIN ".MAIN_DB_PREFIX."user u ON u.rowid = c.fk_user_creat
-			WHERE c.fk_account = ".((int)$fk_account)."
-			  AND c.folder = '".$this->db->escape($folder)."'
-			  AND c.message_uid = ".((int)$message_uid)."
-			  AND c.entity = ".((int)$entity)."
-			  AND c.status = 1
+			WHERE ".$where."
 			ORDER BY c.date_creation ASC";
 
 		$res = $this->db->query($sql);

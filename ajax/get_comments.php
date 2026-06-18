@@ -23,8 +23,9 @@ if (empty($user->rights->inbox->read)) { print json_encode(array('error' => 'Acc
 
 header('Content-Type: application/json');
 
-$uid    = (int) GETPOST('uid', 'int');
-$folder = GETPOST('folder', 'restricthtml') ?: 'INBOX';
+$uid        = (int) GETPOST('uid', 'int');
+$folder     = GETPOST('folder', 'restricthtml') ?: 'INBOX';
+$message_id = GETPOST('message_id', 'restricthtml');
 
 if (!$uid) { print json_encode(array('error' => 'Missing uid')); exit; }
 
@@ -39,7 +40,7 @@ if (!$resql || $db->num_rows($resql) == 0) { print json_encode(array('error' => 
 $fk_account = (int) $db->fetch_object($resql)->rowid;
 
 $obj    = new InboxComment($db);
-$list   = $obj->fetchByMessage($fk_account, $folder, $uid, $conf->entity);
+$list   = $obj->fetchByMessage($fk_account, $folder, $uid, $conf->entity, $message_id);
 
 $data = array();
 foreach ($list as $c) {
