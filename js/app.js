@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const EMAIL_PAGE_SIZE = 50;
 	let emailsLoading = false;
 	let emailsHasMore = false;
+	let scrollObserver = null; // IntersectionObserver for infinite scroll
 
 	// Fetch folders
 	const fetchFolders = () => {
@@ -206,6 +207,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 				emailsHasMore = data.has_more;
 				emailPage++;
+				// Re-arm: if sentinel is still visible, observer won't fire again unless we unobserve+observe
+				if (scrollObserver) {
+					scrollObserver.unobserve(emailSentinel);
+					if (emailsHasMore) scrollObserver.observe(emailSentinel);
+				}
 			})
 			.catch(err => {
 				emailsLoading = false;
@@ -227,14 +233,15 @@ document.addEventListener('DOMContentLoaded', () => {
 	emailSentinel.style.height = '1px';
 	document.getElementById('email-list-container').appendChild(emailSentinel);
 
-	// Infinite scroll: fire when user is within 100px of the bottom of the list
-	document.getElementById('email-list-container').addEventListener('scroll', () => {
-		if (emailsLoading || !emailsHasMore) return;
-		const el = document.getElementById('email-list-container');
-		if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+	// Infinite scroll via IntersectionObserver.
+	// Re-armed after each page load so it fires again when sentinel remains visible
+	// (handles both "content doesn't fill the container" and "user scrolls to bottom").
+	scrollObserver = new IntersectionObserver((entries) => {
+		if (entries[0].isIntersecting && !emailsLoading && emailsHasMore) {
 			fetchEmails(false);
 		}
-	});
+	}, { threshold: 0 });
+	scrollObserver.observe(emailSentinel);
 
 	// Trigger fetch on load
 	fetchFolders();
