@@ -86,7 +86,8 @@
 	gap: 6px;
 }
 
-.inbox-sidebar.collapsed .btn-new-message {
+.inbox-sidebar.collapsed .btn-new-message,
+.inbox-sidebar.collapsed .btn-sidebar-toggle {
 	width: 36px;
 	height: 36px;
 	padding: 0;
@@ -136,8 +137,19 @@
 
 .btn-sidebar-toggle {
 	flex-shrink: 0;
-	font-size: 13px;
+	background: transparent;
+	border: 1px solid var(--border-color);
 	color: var(--text-secondary);
+	padding: 10px 12px;
+	border-radius: 6px;
+	font-size: 14px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.2s;
+}
+
+.btn-sidebar-toggle:hover {
+	background: #e2e8f0;
+	color: var(--primary-color);
 }
 
 .mailbox-section h3 {
