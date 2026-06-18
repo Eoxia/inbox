@@ -67,7 +67,8 @@ class modInbox extends DolibarrModules
 				'perms' => '$user->rights->inbox->read',
 				'target' => '',
 				'user' => 2, // 0=Menu for internal users, 1=external users, 2=both
-				'picto' => 'object_email',
+				'picto'  => 'object_email',
+				'prefix' => 'far fa-envelope',
 			)
 		);
 
