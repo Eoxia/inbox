@@ -142,6 +142,9 @@ class IMAPClient
 					$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
 					$item->deleted  = (isset($overview->deleted)  && $overview->deleted)  ? 1 : 0;
 
+					// User-defined IMAP keywords (space-separated), e.g. "Urgent Projet"
+					$item->keywords = isset($overview->keywords) ? trim($overview->keywords) : '';
+
 					$result[] = $item;
 				}
 			}
@@ -535,6 +538,35 @@ class IMAPClient
 			$this->error = "Failed to append message to folder: " . imap_last_error();
 			return false;
 		}
+	}
+
+	/**
+	 * Set a user-defined keyword flag on a message.
+	 *
+	 * The keyword must be a single ASCII word without spaces (IMAP RFC 3501 §2.3.2).
+	 * Not all IMAP servers support user-defined keywords; failure is silently ignored.
+	 *
+	 * @param  int    $uid      Message UID
+	 * @param  string $keyword  IMAP keyword, e.g. "Urgent"
+	 * @return bool             True on success
+	 */
+	public function setKeyword($uid, $keyword)
+	{
+		if (!$this->mbox) return false;
+		return (bool) imap_setflag_full($this->mbox, (string)$uid, $keyword, ST_UID);
+	}
+
+	/**
+	 * Clear a user-defined keyword flag from a message.
+	 *
+	 * @param  int    $uid      Message UID
+	 * @param  string $keyword  IMAP keyword to remove
+	 * @return bool             True on success
+	 */
+	public function clearKeyword($uid, $keyword)
+	{
+		if (!$this->mbox) return false;
+		return (bool) imap_clearflag_full($this->mbox, (string)$uid, $keyword, ST_UID);
 	}
 
 	/**

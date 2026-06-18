@@ -88,10 +88,14 @@ llxHeader($head, $langs->trans($page_name));
 		<div class="inbox-panel-content">
 			<div class="email-view-header">
 				<h2 class="email-view-subject">Project Update</h2>
-				<div class="email-view-tags">
-					<span class="tag tag-blue">Projet</span>
-					<span class="tag tag-red">Urgent</span>
-					<button class="btn-add-tag"><i class="fa fa-plus"></i> Ajouter un tag</button>
+				<div class="email-view-tags" id="email-view-tags">
+					<!-- Tags injected by JS -->
+					<div class="tag-picker-wrapper" id="tag-picker-wrapper" style="display:none;">
+						<div class="tag-picker" id="tag-picker">
+							<!-- Options injected by JS -->
+						</div>
+					</div>
+					<button class="btn-add-tag" id="btn-add-tag"><i class="fa fa-plus"></i> Tag</button>
 				</div>
 			</div>
 			<div class="email-view-sender-info">

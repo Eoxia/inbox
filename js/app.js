@@ -183,9 +183,12 @@ document.addEventListener('DOMContentLoaded', () => {
 			const bodyContainer = document.querySelector('.email-view-body');
 			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
 
-			// Clear previous attachment list and comments
+			// Clear previous attachment list, tags and comments
 			const existingAttachBar = document.getElementById('email-attachment-bar');
 			if (existingAttachBar) existingAttachBar.remove();
+			const tpw = document.getElementById('tag-picker-wrapper');
+			if (tpw) tpw.style.display = 'none';
+			loadMessageTags(email.message_id);
 			loadComments(email.uid, currentFolder, email.message_id);
 
 			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder))
@@ -621,6 +624,159 @@ document.addEventListener('DOMContentLoaded', () => {
 			}, delay * 1000);
 		});
 	}
+
+	// ── Tags ─────────────────────────────────────────────────────────────────
+
+	let allTags = [];
+
+	const fetchAllTags = () => {
+		fetch('../../custom/inbox/ajax/get_tags.php')
+			.then(r => r.json())
+			.then(data => { if (data.data) allTags = data.data; })
+			.catch(() => {});
+	};
+
+	const renderViewTags = (messageTags) => {
+		const container = document.getElementById('email-view-tags');
+		if (!container) return;
+
+		// Remove existing chips (keep picker wrapper and btn-add-tag)
+		container.querySelectorAll('.tag-dynamic').forEach(el => el.remove());
+
+		messageTags.forEach(t => {
+			const chip = document.createElement('span');
+			chip.className = 'tag tag-dynamic';
+			chip.dataset.tagId = t.fk_tag;
+			chip.style.background = t.tag_color || '#3b82f6';
+			chip.innerHTML = `${escHtml(t.tag_label)}<button class="tag-remove" title="Retirer ce tag" aria-label="Retirer">&#x2715;</button>`;
+			chip.querySelector('.tag-remove').addEventListener('click', (e) => {
+				e.stopPropagation();
+				removeMessageTag(t.fk_tag, chip);
+			});
+			// Insert before picker wrapper
+			const pickerWrapper = document.getElementById('tag-picker-wrapper');
+			container.insertBefore(chip, pickerWrapper);
+		});
+	};
+
+	const loadMessageTags = (message_id) => {
+		if (!message_id) { renderViewTags([]); return; }
+		fetch('../../custom/inbox/ajax/get_message_tags.php?message_id=' + encodeURIComponent(message_id))
+			.then(r => r.json())
+			.then(data => renderViewTags(data.data || []))
+			.catch(() => renderViewTags([]));
+	};
+
+	const escHtml = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+	const buildTagPicker = (message_id) => {
+		const picker = document.getElementById('tag-picker');
+		if (!picker) return;
+		picker.innerHTML = '';
+
+		if (!allTags.length) {
+			picker.innerHTML = '<div class="tag-picker-empty">Aucun tag configuré.</div>';
+			return;
+		}
+
+		// Collect already applied fk_tag ids from chips in DOM
+		const applied = new Set(
+			Array.from(document.querySelectorAll('#email-view-tags .tag-dynamic')).map(el => Number(el.dataset.tagId))
+		);
+
+		allTags.forEach(t => {
+			const item = document.createElement('div');
+			item.className = 'tag-picker-item' + (applied.has(t.rowid) ? ' active' : '');
+			item.innerHTML = `<span class="tag-dot" style="background:${escHtml(t.color)};"></span>${escHtml(t.label)}`;
+			item.addEventListener('click', () => {
+				if (applied.has(t.rowid)) {
+					// Remove
+					const chip = document.querySelector(`#email-view-tags .tag-dynamic[data-tag-id="${t.rowid}"]`);
+					if (chip) removeMessageTag(t.rowid, chip);
+					item.classList.remove('active');
+					applied.delete(t.rowid);
+				} else {
+					// Add
+					addMessageTag(t, message_id, item);
+					item.classList.add('active');
+					applied.add(t.rowid);
+				}
+			});
+			picker.appendChild(item);
+		});
+	};
+
+	const addMessageTag = (tag, message_id, pickerItem) => {
+		if (!currentEmail) return;
+		const fd = new URLSearchParams();
+		fd.append('fk_tag', tag.rowid);
+		fd.append('message_id', message_id);
+		fd.append('uid', currentEmail.uid);
+		fd.append('folder', currentFolder);
+
+		fetch('../../custom/inbox/ajax/add_message_tag.php', { method: 'POST', body: fd })
+			.then(r => r.json())
+			.then(data => {
+				if (data.error) { console.error('add tag error:', data.error); return; }
+				// Add chip to view
+				const chip = document.createElement('span');
+				chip.className = 'tag tag-dynamic';
+				chip.dataset.tagId = tag.rowid;
+				chip.style.background = tag.color || '#3b82f6';
+				chip.innerHTML = `${escHtml(tag.label)}<button class="tag-remove" title="Retirer ce tag" aria-label="Retirer">&#x2715;</button>`;
+				chip.querySelector('.tag-remove').addEventListener('click', (e) => {
+					e.stopPropagation();
+					removeMessageTag(tag.rowid, chip);
+					if (pickerItem) pickerItem.classList.remove('active');
+				});
+				const pickerWrapper = document.getElementById('tag-picker-wrapper');
+				document.getElementById('email-view-tags').insertBefore(chip, pickerWrapper);
+			})
+			.catch(err => console.error(err));
+	};
+
+	const removeMessageTag = (fk_tag, chipEl) => {
+		if (!currentEmail) return;
+		const fd = new URLSearchParams();
+		fd.append('fk_tag', fk_tag);
+		fd.append('message_id', currentEmail.message_id);
+		fd.append('uid', currentEmail.uid);
+		fd.append('folder', currentFolder);
+
+		chipEl.style.opacity = '0.4';
+		fetch('../../custom/inbox/ajax/remove_message_tag.php', { method: 'POST', body: fd })
+			.then(r => r.json())
+			.then(data => {
+				if (data.error) { chipEl.style.opacity = '1'; console.error('remove tag error:', data.error); return; }
+				chipEl.remove();
+			})
+			.catch(err => { chipEl.style.opacity = '1'; console.error(err); });
+	};
+
+	// Tag picker toggle
+	const btnAddTag = document.getElementById('btn-add-tag');
+	const tagPickerWrapper = document.getElementById('tag-picker-wrapper');
+
+	if (btnAddTag && tagPickerWrapper) {
+		btnAddTag.addEventListener('click', (e) => {
+			e.stopPropagation();
+			const open = tagPickerWrapper.style.display !== 'none';
+			if (open) {
+				tagPickerWrapper.style.display = 'none';
+			} else {
+				buildTagPicker(currentEmail ? currentEmail.message_id : null);
+				tagPickerWrapper.style.display = 'block';
+			}
+		});
+
+		document.addEventListener('click', (e) => {
+			if (!tagPickerWrapper.contains(e.target) && e.target !== btnAddTag) {
+				tagPickerWrapper.style.display = 'none';
+			}
+		});
+	}
+
+	fetchAllTags();
 
 	// ── Comments ────────────────────────────────────────────────────────────
 
