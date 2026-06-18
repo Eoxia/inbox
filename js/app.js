@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const existingAttachBar = document.getElementById('email-attachment-bar');
 			if (existingAttachBar) existingAttachBar.remove();
 
-			fetch('../../custom/inbox/ajax/get_email_body.php?msgno=' + email.msgno + '&folder=' + encodeURIComponent(currentFolder))
+			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder))
 				.then(res => {
 					if (!res.ok) throw new Error("HTTP error " + res.status);
 					return res.json();
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
 						bodyData.attachments.forEach(att => {
 							const kb = att.size > 0 ? ' (' + (att.size > 1048576 ? (att.size / 1048576).toFixed(1) + ' Mo' : Math.ceil(att.size / 1024) + ' Ko') + ')' : '';
 							const url = '../../custom/inbox/ajax/get_attachment.php'
-								+ '?msgno=' + encodeURIComponent(email.msgno)
+								+ '?uid=' + encodeURIComponent(email.uid)
 								+ '&partno=' + encodeURIComponent(att.partno)
 								+ '&encoding=' + encodeURIComponent(att.encoding || 0)
 								+ '&folder=' + encodeURIComponent(currentFolder)
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			if (!currentEmail) return;
 
 			const formData = new URLSearchParams();
-			formData.append('msgno', currentEmail.msgno);
+			formData.append('uid', currentEmail.uid);
 			formData.append('folder', currentFolder);
 			if (trashFolder && trashFolder !== currentFolder) {
 				formData.append('trash_folder', trashFolder);
@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			formData.append('cc', document.getElementById('reply-cc').value);
 			formData.append('subject', document.getElementById('reply-subject').value);
 			formData.append('body', bodyContent);
-			formData.append('in_reply_to', currentEmail.msgno);
+			formData.append('in_reply_to', currentEmail.uid);
 			
 			// Hide form immediately
 			document.getElementById('reply-form-container').style.display = 'none';

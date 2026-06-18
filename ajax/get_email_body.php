@@ -41,9 +41,9 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
-$msgno = GETPOST('msgno', 'int');
-if (empty($msgno)) {
-	print json_encode(array('error' => 'Missing message number'));
+$uid = (int) GETPOST('uid', 'int');
+if (empty($uid)) {
+	print json_encode(array('error' => 'Missing message UID'));
 	exit;
 }
 
@@ -86,8 +86,8 @@ if (!$connected) {
 	exit;
 }
 
-$body        = $client->getMessageBody($msgno);
-$attachments = $client->getAttachments($msgno);
+$body        = $client->getMessageBody($uid);
+$attachments = $client->getAttachments($uid);
 
 $client->close();
 

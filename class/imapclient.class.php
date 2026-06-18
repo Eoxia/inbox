@@ -82,18 +82,16 @@ dol_syslog($conn_string, LOG_NOTICE);
 		}
 
 		$date_since = date("d-M-Y", strtotime("-".$limit_days." days"));
-		$emails = imap_search($this->mbox, 'SINCE "'.$date_since.'"');
+		// SE_UID: return UIDs instead of sequence numbers — UIDs never change after expunge
+		$emails = imap_search($this->mbox, 'SINCE "'.$date_since.'"', SE_UID);
 
 		if (!$emails) {
 			return array('messages' => array(), 'total' => 0, 'has_more' => false);
 		}
 
-		// Sort by newest first; limit_nb is no longer used to cap the pool
-		// since pagination (offset/page_size) already controls per-request loading.
 		rsort($emails);
 		$total = count($emails);
 
-		// Paginate
 		$page_emails = array_slice($emails, $offset, $page_size);
 		$has_more = ($offset + $page_size) < $total;
 
@@ -101,13 +99,13 @@ dol_syslog($conn_string, LOG_NOTICE);
 
 		if (!empty($page_emails)) {
 			$sequence = implode(',', $page_emails);
-			$overviews = imap_fetch_overview($this->mbox, $sequence, 0);
+			// FT_UID: sequence is UIDs
+			$overviews = imap_fetch_overview($this->mbox, $sequence, FT_UID);
 
 			if ($overviews) {
 				foreach ($overviews as $overview) {
 					$item = new stdClass();
 					$item->uid = $overview->uid;
-					$item->msgno = $overview->msgno;
 
 					$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
 					$item->subject = $this->decodeMimeHeader($subject);
@@ -116,19 +114,16 @@ dol_syslog($conn_string, LOG_NOTICE);
 					$item->from = $this->decodeMimeHeader($from);
 
 					$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
-					$item->seen = (isset($overview->seen) && $overview->seen) ? 1 : 0;
-					$item->recent = (isset($overview->recent) && $overview->recent) ? 1 : 0;
+					$item->seen     = (isset($overview->seen)     && $overview->seen)     ? 1 : 0;
 					$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
-					$item->deleted = (isset($overview->deleted) && $overview->deleted) ? 1 : 0;
-					$item->snippet = '';
+					$item->deleted  = (isset($overview->deleted)  && $overview->deleted)  ? 1 : 0;
 
 					$result[] = $item;
 				}
 			}
 
-			usort($result, function($a, $b) {
-				return $b->msgno - $a->msgno;
-			});
+			// Higher UID = newer message
+			usort($result, function ($a, $b) { return $b->uid - $a->uid; });
 		}
 
 		return array('messages' => $result, 'total' => $total, 'has_more' => $has_more);
@@ -160,31 +155,30 @@ dol_syslog($conn_string, LOG_NOTICE);
 
 	/**
 	 * Return list of attachments for a message
-	 * @param int $msgno
-	 * @return array  Each element: ['partno', 'filename', 'mime', 'size']
+	 * @param int $uid  Message UID
+	 * @return array  Each element: ['partno', 'filename', 'mime', 'size', 'encoding']
 	 */
-	public function getAttachments($msgno)
+	public function getAttachments($uid)
 	{
 		if (!$this->mbox) return array();
-		$structure = @imap_fetchstructure($this->mbox, $msgno);
+		$structure = @imap_fetchstructure($this->mbox, $uid, FT_UID);
 		$attachments = array();
-		$this->findAttachments($msgno, $structure, $attachments, '');
+		$this->findAttachments($structure, $attachments, '');
 		return $attachments;
 	}
 
-	private function findAttachments($msgno, $structure, &$attachments, $partno)
+	private function findAttachments($structure, &$attachments, $partno)
 	{
 		if (!$structure) return;
 
 		if ($structure->type == 1) { // MULTIPART
 			foreach ($structure->parts as $index => $subStruct) {
 				$sub = $partno ? $partno.'.'.($index + 1) : (string)($index + 1);
-				$this->findAttachments($msgno, $subStruct, $attachments, $sub);
+				$this->findAttachments($subStruct, $attachments, $sub);
 			}
 			return;
 		}
 
-		// Collect filename from Content-Disposition params first, then Content-Type params
 		$filename = '';
 		if (!empty($structure->dparameters)) {
 			foreach ($structure->dparameters as $p) {
@@ -205,7 +199,6 @@ dol_syslog($conn_string, LOG_NOTICE);
 
 		if (empty($filename)) return;
 
-		// Skip inline text parts — those are the email body
 		$disposition = isset($structure->disposition) ? strtolower($structure->disposition) : '';
 		if ($disposition === 'inline' && $structure->type === 0
 			&& in_array(strtolower($structure->subtype), array('html', 'plain'))) {
@@ -217,50 +210,24 @@ dol_syslog($conn_string, LOG_NOTICE);
 			'filename' => $filename,
 			'mime'     => $this->getMimeType($structure),
 			'size'     => isset($structure->bytes) ? (int)$structure->bytes : 0,
+			'encoding' => isset($structure->encoding) ? (int)$structure->encoding : 0,
 		);
 	}
 
 	/**
-	 * Fetch raw bytes for one MIME part (for attachment download)
-	 * @param int    $msgno
+	 * Fetch decoded bytes for one MIME part (for attachment download)
+	 * @param int    $uid
 	 * @param string $partno  e.g. "2" or "1.2"
-	 * @param int    $encoding  IMAP encoding constant
+	 * @param int    $encoding  IMAP encoding constant (3=base64, 4=qp)
 	 * @return string
 	 */
-	public function getAttachmentData($msgno, $partno, $encoding)
+	public function getAttachmentData($uid, $partno, $encoding)
 	{
 		if (!$this->mbox) return '';
-		$raw = @imap_fetchbody($this->mbox, $msgno, $partno);
+		$raw = @imap_fetchbody($this->mbox, $uid, $partno, FT_UID);
 		if ($encoding == 3) return base64_decode($raw);
 		if ($encoding == 4) return quoted_printable_decode($raw);
 		return $raw;
-	}
-
-	/**
-	 * Return encoding constant for a specific part
-	 * @param int    $msgno
-	 * @param string $partno
-	 * @return int
-	 */
-	public function getPartEncoding($msgno, $partno)
-	{
-		$structure = @imap_fetchstructure($this->mbox, $msgno);
-		return $this->findPartEncoding($structure, explode('.', $partno));
-	}
-
-	private function findPartEncoding($structure, $path)
-	{
-		$idx = (int)array_shift($path) - 1;
-		if (!empty($path)) {
-			if (isset($structure->parts[$idx])) {
-				return $this->findPartEncoding($structure->parts[$idx], $path);
-			}
-			return 0;
-		}
-		if ($structure->type == 1 && isset($structure->parts[$idx])) {
-			return $structure->parts[$idx]->encoding;
-		}
-		return $structure->encoding ?? 0;
 	}
 
 	/**
@@ -269,55 +236,50 @@ dol_syslog($conn_string, LOG_NOTICE);
 	 * @param int $msgno Message number
 	 * @return string
 	 */
-	public function getMessageBody($msgno)
+	public function getMessageBody($uid)
 	{
 		if (!$this->mbox) return '';
 
-		$structure = @imap_fetchstructure($this->mbox, $msgno);
-		$body = $this->getPart($this->mbox, $msgno, "TEXT/HTML", $structure);
+		$structure = @imap_fetchstructure($this->mbox, $uid, FT_UID);
+		$body = $this->getPart($this->mbox, $uid, "TEXT/HTML", $structure);
 
 		if (empty($body)) {
-			$body = $this->getPart($this->mbox, $msgno, "TEXT/PLAIN", $structure);
+			$body = $this->getPart($this->mbox, $uid, "TEXT/PLAIN", $structure);
 			if ($body) {
 				$body = nl2br(htmlspecialchars($body));
 			}
 		}
 
 		if (empty($body)) {
-			// Fallback
-			$body = @imap_body($this->mbox, $msgno);
+			$body = @imap_body($this->mbox, $uid, FT_UID);
 		}
 
 		return $body;
 	}
 
-	/**
-	 * Extract specific part from IMAP message
-	 */
-	private function getPart($mbox, $msgno, $mimeType, $structure, $partNumber = false)
+	private function getPart($mbox, $uid, $mimeType, $structure, $partNumber = false)
 	{
 		if (!$structure) return false;
 
-		$prefix = ($partNumber ? $partNumber . "." : "");
+		$prefix = ($partNumber ? $partNumber."." : "");
 
 		if ($structure->type == 1) { // MULTIPART
 			foreach ($structure->parts as $index => $subStruct) {
-				$partNum = $prefix . ($index + 1);
+				$partNum = $prefix.($index + 1);
 				if ($structure->subtype == "ALTERNATIVE") {
-					// In alternative, HTML is usually last. We check if it matches what we want.
 					$mime = $this->getMimeType($subStruct);
 					if (strtoupper($mime) == strtoupper($mimeType)) {
-						return $this->decodeBody(@imap_fetchbody($mbox, $msgno, $partNum), $subStruct->encoding, $subStruct->parameters);
+						return $this->decodeBody(@imap_fetchbody($mbox, $uid, $partNum, FT_UID), $subStruct->encoding, $subStruct->parameters);
 					}
 				}
-				$data = $this->getPart($mbox, $msgno, $mimeType, $subStruct, $partNum);
+				$data = $this->getPart($mbox, $uid, $mimeType, $subStruct, $partNum);
 				if ($data) return $data;
 			}
 		} else {
 			$mime = $this->getMimeType($structure);
 			if (strtoupper($mime) == strtoupper($mimeType)) {
 				$partNum = $partNumber ? $partNumber : "1";
-				return $this->decodeBody(@imap_fetchbody($mbox, $msgno, $partNum), $structure->encoding, $structure->parameters);
+				return $this->decodeBody(@imap_fetchbody($mbox, $uid, $partNum, FT_UID), $structure->encoding, $structure->parameters);
 			}
 		}
 		return false;
@@ -443,12 +405,13 @@ dol_syslog($conn_string, LOG_NOTICE);
 	 * @param string $dest_folder Destination folder name (UTF-8)
 	 * @return bool
 	 */
-	public function moveMessage($msgno, $dest_folder)
+	public function moveMessage($uid, $dest_folder)
 	{
 		if (!$this->mbox) return false;
 
 		$dest = imap_utf7_encode($dest_folder);
-		if (!imap_mail_move($this->mbox, (string)$msgno, $dest)) {
+		// CP_UID: $uid is a UID, not a sequence number
+		if (!imap_mail_move($this->mbox, (string)$uid, $dest, CP_UID)) {
 			$this->error = "Failed to move message: " . imap_last_error();
 			return false;
 		}
@@ -458,14 +421,15 @@ dol_syslog($conn_string, LOG_NOTICE);
 
 	/**
 	 * Permanently delete a message (mark \Deleted + expunge)
-	 * @param int $msgno Message sequence number
+	 * @param int $uid Message UID
 	 * @return bool
 	 */
-	public function deleteMessage($msgno)
+	public function deleteMessage($uid)
 	{
 		if (!$this->mbox) return false;
 
-		if (!imap_delete($this->mbox, (string)$msgno)) {
+		// FT_UID: $uid is a UID, not a sequence number
+		if (!imap_delete($this->mbox, (string)$uid, FT_UID)) {
 			$this->error = "Failed to delete message: " . imap_last_error();
 			return false;
 		}

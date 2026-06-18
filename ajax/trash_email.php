@@ -32,12 +32,12 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
-$msgno       = (int) GETPOST('msgno', 'int');
-$folder      = GETPOST('folder', 'restricthtml');
+$uid          = (int) GETPOST('uid', 'int');
+$folder       = GETPOST('folder', 'restricthtml');
 $trash_folder = GETPOST('trash_folder', 'restricthtml');
 
-if (!$msgno) {
-	print json_encode(array('error' => 'Missing msgno'));
+if (!$uid) {
+	print json_encode(array('error' => 'Missing uid'));
 	exit;
 }
 if (empty($folder)) {
@@ -75,9 +75,9 @@ if (!$connected) {
 }
 
 if (!empty($trash_folder) && $trash_folder !== $folder) {
-	$ok = $client->moveMessage($msgno, $trash_folder);
+	$ok = $client->moveMessage($uid, $trash_folder);
 } else {
-	$ok = $client->deleteMessage($msgno);
+	$ok = $client->deleteMessage($uid);
 }
 
 $client->close();

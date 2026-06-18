@@ -30,20 +30,19 @@ if (empty($user->rights->inbox->read)) {
 	exit('Access denied');
 }
 
-$msgno    = (int) GETPOST('msgno', 'int');
+$uid      = (int) GETPOST('uid', 'int');
 $partno   = GETPOST('partno', 'alphanohtml');
 $filename = GETPOST('filename', 'alphanohtml');
 $folder   = GETPOST('folder', 'restricthtml');
 $encoding = (int) GETPOST('encoding', 'int');
 
-// partno must look like "1", "2", "1.2", "1.2.3" — nothing else
 if (!preg_match('/^\d+(\.\d+)*$/', $partno)) {
 	http_response_code(400);
 	exit('Invalid part number');
 }
-if (!$msgno) {
+if (!$uid) {
 	http_response_code(400);
-	exit('Missing msgno');
+	exit('Missing uid');
 }
 if (empty($folder)) {
 	$folder = 'INBOX';
@@ -79,7 +78,7 @@ if (!$connected) {
 	exit('IMAP connection failed: '.$client->error);
 }
 
-$data = $client->getAttachmentData($msgno, $partno, $encoding);
+$data = $client->getAttachmentData($uid, $partno, $encoding);
 $client->close();
 
 if ($data === '' || $data === false) {
