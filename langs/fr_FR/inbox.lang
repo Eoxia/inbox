@@ -1,31 +1,78 @@
 Inbox=Inbox
 Module104500Name=Inbox
 Module104500Desc=Webmail natif collaboratif pour Dolibarr.
+
+# Setup / Accounts
 InboxSetup=Configuration du module Inbox
 InboxSetupPageDesc=Page de configuration du webmail collaboratif. Ajoutez et gérez ici les boîtes emails (IMAP/SMTP).
-Parameter=Paramètre
-Value=Valeur
-BackToModuleList=Retour à la liste des modules
+InboxAccounts=Boîtes emails
 InboxAccountsList=Liste des boîtes emails
 AddNewAccount=Ajouter une nouvelle boîte email
-Label=Nom / Libellé
-Email=Adresse E-mail
-SharedAccount=Boîte partagée (collaborative)
+AddAccount=Ajouter un compte
+EditAccount=Modifier le compte
+InboxShared=Boîte partagée (collaborative)
 IMAPConfig=Paramètres IMAP (Réception)
 SMTPConfig=Paramètres SMTP (Envoi)
 IMAPServer=Hôte IMAP
 SMTPServer=Hôte SMTP
-Server=Hôte
-Port=Port
-Security=Sécurité
-Login=Utilisateur
-Password=Mot de passe
-Active=Actif
-Disabled=Désactivé
+TestConnection=Tester la connexion IMAP/SMTP
 WarningTableNotExists=Attention : Les tables de la base de données n'existent pas. Veuillez désactiver puis réactiver le module pour forcer leur création.
+InboxUpdateError=Erreur lors de la mise à jour.
+
+# Test connexion
+InboxImapConnectOk=IMAP : Connexion réussie.
+InboxImapError=Erreur IMAP :
+InboxImapExtensionMissing=L'extension PHP 'imap' n'est pas installée sur le serveur.
+InboxSmtpConnectOk=SMTP : Connexion réussie et email de test envoyé.
+InboxSmtpError=Erreur SMTP :
+
+# Sync limits
+InboxSyncLimits=Limites de synchronisation (IMAP)
 InboxSyncLimitNb=Nombre maximum d'emails à synchroniser
 InboxSyncLimitDays=Ancienneté maximum (en jours)
-Synchronization=Synchronisation
-TestConnection=Tester la connexion IMAP/SMTP
-InboxAccounts=Boîtes emails
+InboxSyncLimitNbDefault=Défaut : 500
+InboxSyncLimitDaysDefault=Défaut : 180 (6 mois)
+
+# Global settings
+InboxGlobalSettings=Paramètres globaux
+InboxSendDelayLabel=Délai d'annulation d'envoi (secondes)
+InboxSendDelayHelp=Nombre de secondes avant l'expédition réelle, permettant d'annuler l'envoi. (Défaut : 10)
+InboxRefreshIntervalLabel=Intervalle d'actualisation automatique (secondes)
+InboxRefreshIntervalHelp=Rafraîchissement automatique de la liste des emails. 0 = désactivé. (Défaut : 0)
+
+# Tags admin
 InboxTags=Tags
+InboxNewTag=Nouveau tag
+InboxEditTag=Modifier le tag
+InboxTagCreated=Tag créé avec succès.
+InboxTagUpdated=Tag mis à jour.
+InboxTagDeleted=Tag supprimé.
+InboxTagLabel=Libellé
+InboxColor=Couleur
+InboxImapKeyword=Keyword IMAP
+InboxImapKeywordPlaceholder=ex : Urgent (optionnel)
+InboxImapKeywordHelp=Mot-clé ASCII sans espace — synchronisé avec le serveur mail si supporté.
+InboxNoTagDefined=Aucun tag défini.
+InboxConfirmDeleteTag=Supprimer ce tag ?
+
+# Main interface
+InboxNewMessage=Nouveau message
+InboxMailboxes=Boîtes aux lettres
+InboxSearchPlaceholder=Rechercher...
+InboxErpContext=Contexte ERP
+InboxLinkedDocuments=Pièces liées
+InboxLinkDocumentPlaceholder=Lier une facture, un devis...
+InboxInternalComments=Commentaires internes
+InboxAddComment=Ajouter un commentaire...
+InboxReply=Répondre
+InboxTo=À :
+InboxCc=Cc :
+InboxSubject=Objet :
+InboxCancelSend=Annuler l'envoi
+InboxSend=Envoyer
+
+# Misc
+Synchronization=Synchronisation
+Parameter=Paramètre
+Value=Valeur
+BackToModuleList=Retour à la liste des modules

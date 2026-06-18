@@ -52,7 +52,7 @@ if ($action === 'add') {
 		if ($t->create($user) < 0) {
 			setEventMessages($t->error, null, 'errors');
 		} else {
-			setEventMessages("Tag créé.", null, 'mesgs');
+			setEventMessages($langs->trans("InboxTagCreated"), null, 'mesgs');
 		}
 	}
 }
@@ -67,7 +67,7 @@ if ($action === 'update' && $rowid) {
 	if ($t->update($user) < 0) {
 		setEventMessages($t->error, null, 'errors');
 	} else {
-		setEventMessages("Tag mis à jour.", null, 'mesgs');
+		setEventMessages($langs->trans("InboxTagUpdated"), null, 'mesgs');
 	}
 }
 
@@ -77,7 +77,7 @@ if ($action === 'delete' && $rowid) {
 	if ($t->delete($user) < 0) {
 		setEventMessages($t->error, null, 'errors');
 	} else {
-		setEventMessages("Tag supprimé.", null, 'mesgs');
+		setEventMessages($langs->trans("InboxTagDeleted"), null, 'mesgs');
 	}
 }
 
@@ -105,25 +105,25 @@ print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="'.($editing ? 'update' : 'add').'">';
 if ($editing) print '<input type="hidden" name="rowid" value="'.$editing->rowid.'">';
 print '<table class="noborder centpercent">';
-print '<tr class="liste_titre"><th colspan="2">'.($editing ? 'Modifier le tag' : 'Nouveau tag').'</th></tr>';
+print '<tr class="liste_titre"><th colspan="2">'.($editing ? $langs->trans("InboxEditTag") : $langs->trans("InboxNewTag")).'</th></tr>';
 
-$lbl   = $editing ? dol_escape_htmltag($editing->label)        : '';
-$col   = $editing ? dol_escape_htmltag($editing->color)        : '#3b82f6';
-$kw    = $editing ? dol_escape_htmltag($editing->imap_keyword) : '';
+$lbl = $editing ? dol_escape_htmltag($editing->label)        : '';
+$col = $editing ? dol_escape_htmltag($editing->color)        : '#3b82f6';
+$kw  = $editing ? dol_escape_htmltag($editing->imap_keyword) : '';
 
-print '<tr class="oddeven"><td style="width:180px">Libellé <span style="color:red">*</span></td>';
+print '<tr class="oddeven"><td style="width:180px">'.$langs->trans("InboxTagLabel").' <span style="color:red">*</span></td>';
 print '<td><input type="text" name="label" value="'.$lbl.'" maxlength="50" required style="width:200px;"></td></tr>';
 
-print '<tr class="oddeven"><td>Couleur</td>';
+print '<tr class="oddeven"><td>'.$langs->trans("InboxColor").'</td>';
 print '<td><input type="color" name="color" value="'.$col.'" style="height:36px;width:60px;padding:2px;border:1px solid #ccc;border-radius:4px;cursor:pointer;"></td></tr>';
 
-print '<tr class="oddeven"><td>Keyword IMAP</td>';
-print '<td><input type="text" name="imap_keyword" value="'.$kw.'" maxlength="50" placeholder="ex: Urgent (optionnel)" style="width:200px;">';
-print '<div style="font-size:0.82em;color:#64748b;margin-top:3px;">Mot-clé ASCII sans espace — synchronisé avec le serveur mail si supporté.</div></td></tr>';
+print '<tr class="oddeven"><td>'.$langs->trans("InboxImapKeyword").'</td>';
+print '<td><input type="text" name="imap_keyword" value="'.$kw.'" maxlength="50" placeholder="'.dol_escape_htmltag($langs->trans("InboxImapKeywordPlaceholder")).'" style="width:200px;">';
+print '<div style="font-size:0.82em;color:#64748b;margin-top:3px;">'.$langs->trans("InboxImapKeywordHelp").'</div></td></tr>';
 
 print '<tr><td></td><td style="padding-top:10px;">';
-print '<button type="submit" class="butAction">'.($editing ? 'Mettre à jour' : 'Créer').'</button>';
-if ($editing) print ' <a href="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php" class="butActionDelete" style="margin-left:8px;">Annuler</a>';
+print '<button type="submit" class="butAction">'.($editing ? $langs->trans("Save") : $langs->trans("Create")).'</button>';
+if ($editing) print ' <a href="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php" class="butActionDelete" style="margin-left:8px;">'.$langs->trans("Cancel").'</a>';
 print '</td></tr>';
 print '</table></form></div>';
 
@@ -133,11 +133,11 @@ $tags   = $tagObj->fetchAll($conf->entity);
 
 print '<table class="noborder centpercent" style="max-width:700px;">';
 print '<tr class="liste_titre">';
-print '<th>Tag</th><th>Keyword IMAP</th><th style="text-align:center;">Actions</th>';
+print '<th>'.$langs->trans("InboxTags").'</th><th>'.$langs->trans("InboxImapKeyword").'</th><th style="text-align:center;">'.$langs->trans("Actions").'</th>';
 print '</tr>';
 
 if (empty($tags)) {
-	print '<tr class="oddeven"><td colspan="3" style="text-align:center;color:#64748b;">Aucun tag défini.</td></tr>';
+	print '<tr class="oddeven"><td colspan="3" style="text-align:center;color:#64748b;">'.$langs->trans("InboxNoTagDefined").'</td></tr>';
 }
 
 foreach ($tags as $t) {
@@ -148,10 +148,10 @@ foreach ($tags as $t) {
 	print '</span></td>';
 	print '<td><code style="font-size:0.85em;">'.($t->imap_keyword ? dol_escape_htmltag($t->imap_keyword) : '<em style="color:#94a3b8;">—</em>').'</code></td>';
 	print '<td style="text-align:center;">';
-	print '<a href="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php?action=edit&rowid='.$t->rowid.'" class="butAction" style="margin-right:5px;">Modifier</a>';
-	print '<form method="POST" action="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php" style="display:inline;" onsubmit="return confirm(\'Supprimer ce tag ?\');">';
+	print '<a href="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php?action=edit&rowid='.$t->rowid.'" class="butAction" style="margin-right:5px;">'.$langs->trans("Modify").'</a>';
+	print '<form method="POST" action="'.DOL_URL_ROOT.'/custom/inbox/admin/tags.php" style="display:inline;" onsubmit="return confirm(\''.dol_escape_js($langs->trans("InboxConfirmDeleteTag")).'\');">';
 	print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="delete"><input type="hidden" name="rowid" value="'.$t->rowid.'">';
-	print '<button type="submit" class="butActionDelete">Supprimer</button>';
+	print '<button type="submit" class="butActionDelete">'.$langs->trans("Delete").'</button>';
 	print '</form>';
 	print '</td></tr>';
 }

@@ -106,13 +106,13 @@ if ($action == 'add') {
 		$imap = @imap_open($mailbox, $account->imap_login, $account->imap_password, 0, 1);
 		if ($imap) {
 			$imap_ok = true;
-			$imap_msg = "IMAP: Connexion réussie.";
+			$imap_msg = $langs->trans("InboxImapConnectOk");
 			imap_close($imap);
 		} else {
-			$imap_msg = "IMAP Erreur: " . imap_last_error();
+			$imap_msg = $langs->trans("InboxImapError").' '.imap_last_error();
 		}
 	} else {
-		$imap_msg = "IMAP Erreur: L'extension PHP 'imap' n'est pas installée sur le serveur.";
+		$imap_msg = $langs->trans("InboxImapError").' '.$langs->trans("InboxImapExtensionMissing");
 	}
 
 	// SMTP Test
@@ -141,9 +141,9 @@ if ($action == 'add') {
 	
 	if ($res_send) {
 		$smtp_ok = true;
-		$smtp_msg = "SMTP: Connexion réussie et email de test envoyé.";
+		$smtp_msg = $langs->trans("InboxSmtpConnectOk");
 	} else {
-		$smtp_msg = "SMTP Erreur: " . $mailfile->error;
+		$smtp_msg = $langs->trans("InboxSmtpError").' '.$mailfile->error;
 	}
 
 	// Restore
@@ -204,7 +204,7 @@ if ($action == 'add') {
 		$action = '';
 		$account = new InboxAccount($db); // clear for next view
 	} else {
-		setEventMessages("Erreur de mise à jour", null, 'errors');
+		setEventMessages($langs->trans("InboxUpdateError"), null, 'errors');
 	}
 }
 
@@ -318,9 +318,9 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<tr><td>'.$langs->trans("Password").'</td><td><input type="password" name="smtp_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
 
 	// Sync Limits
-	print '<tr><td colspan="2" class="liste_titre">Limites de synchronisation (IMAP)</td></tr>';
-	print '<tr><td>Nombre max d\'emails à synchroniser</td><td><input type="number" name="sync_limit_nb" value="'.($account->sync_limit_nb ? $account->sync_limit_nb : '500').'" size="6"> <span class="opacitymedium">Défaut: 500</span></td></tr>';
-	print '<tr><td>Ancienneté max en jours</td><td><input type="number" name="sync_limit_days" value="'.($account->sync_limit_days ? $account->sync_limit_days : '180').'" size="6"> <span class="opacitymedium">Défaut: 180 (6 mois)</span></td></tr>';
+	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("InboxSyncLimits").'</td></tr>';
+	print '<tr><td>'.$langs->trans("InboxSyncLimitNb").'</td><td><input type="number" name="sync_limit_nb" value="'.($account->sync_limit_nb ? $account->sync_limit_nb : '500').'" size="6"> <span class="opacitymedium">'.$langs->trans("InboxSyncLimitNbDefault").'</span></td></tr>';
+	print '<tr><td>'.$langs->trans("InboxSyncLimitDays").'</td><td><input type="number" name="sync_limit_days" value="'.($account->sync_limit_days ? $account->sync_limit_days : '180').'" size="6"> <span class="opacitymedium">'.$langs->trans("InboxSyncLimitDaysDefault").'</span></td></tr>';
 
 	print '</table>';
 
@@ -335,7 +335,7 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 } else {
 	// Only show global params if not editing an account
 	print '<br>';
-	print load_fiche_titre("Paramètres globaux", '', '');
+	print load_fiche_titre($langs->trans("InboxGlobalSettings"), '', '');
 
 	if ($action == 'set_global') {
 		$delay = GETPOST('inbox_send_delay', 'int');
@@ -350,13 +350,13 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<input type="hidden" name="action" value="set_global">';
 
 	print '<table class="border centpercent">';
-	print '<tr><td class="titlefield">Délai d\'annulation d\'envoi (secondes)</td><td>';
+	print '<tr><td class="titlefield">'.$langs->trans("InboxSendDelayLabel").'</td><td>';
 	print '<input type="number" name="inbox_send_delay" value="'.getDolGlobalInt('INBOX_SEND_DELAY', 10).'" min="0" size="6">';
-	print ' <span class="opacitymedium">Nombre de secondes avant l\'expédition réelle, permettant d\'annuler l\'envoi (Défaut: 10).</span>';
+	print ' <span class="opacitymedium">'.$langs->trans("InboxSendDelayHelp").'</span>';
 	print '</td></tr>';
-	print '<tr><td class="titlefield">Intervalle d\'actualisation automatique (secondes)</td><td>';
+	print '<tr><td class="titlefield">'.$langs->trans("InboxRefreshIntervalLabel").'</td><td>';
 	print '<input type="number" name="inbox_refresh_interval" value="'.getDolGlobalInt('INBOX_REFRESH_INTERVAL', 0).'" min="0" size="6">';
-	print ' <span class="opacitymedium">Rafraîchissement automatique de la liste des emails. 0 = désactivé (Défaut: 0).</span>';
+	print ' <span class="opacitymedium">'.$langs->trans("InboxRefreshIntervalHelp").'</span>';
 	print '</td></tr>';
 	print '</table>';
 	print '<div class="center"><br><input type="submit" class="button button-save" value="'.$langs->trans("Save").'"></div>';

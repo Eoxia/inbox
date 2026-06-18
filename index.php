@@ -39,12 +39,12 @@ llxHeader($head, $langs->trans($page_name));
 	<!-- Panel 1: Mailboxes / Folders -->
 	<div class="inbox-panel inbox-sidebar" id="panel-folders">
 		<div class="inbox-panel-header">
-			<button class="btn-new-message"><i class="fa fa-edit"></i><span class="btn-label"> Nouveau message</span></button>
+			<button class="btn-new-message"><i class="fa fa-edit"></i><span class="btn-label"> <?php echo $langs->trans('InboxNewMessage'); ?></span></button>
 			<button class="btn-sidebar-toggle btn-icon" id="btn-sidebar-toggle" title="Réduire la barre latérale"><i class="fa fa-chevron-left"></i></button>
 		</div>
 		<div class="inbox-panel-content">
 			<div class="mailbox-section">
-				<h3>MAILBOXES</h3>
+				<h3><?php echo $langs->trans('InboxMailboxes'); ?></h3>
 				<ul class="folder-list" id="dynamic-folder-list">
 					<li class="active"><i class="fa fa-spin fa-spinner"></i> Chargement...</li>
 				</ul>
@@ -55,7 +55,7 @@ llxHeader($head, $langs->trans($page_name));
 	<!-- Panel 2: Email List -->
 	<div class="inbox-panel inbox-list" id="panel-list">
 		<div class="inbox-panel-header">
-			<input type="text" placeholder="Search mail..." class="inbox-search">
+			<input type="text" placeholder="<?php echo dol_escape_htmltag($langs->trans('InboxSearchPlaceholder')); ?>" class="inbox-search">
 			<button class="btn-icon"><i class="fa fa-sync"></i></button>
 		</div>
 		<div class="inbox-panel-content" id="email-list-container">
@@ -112,17 +112,17 @@ llxHeader($head, $langs->trans($page_name));
 			</div>
 
 			<div id="reply-form-container" style="display: none; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
-				<h3 style="margin-bottom: 15px; font-size: 1.1em; color: #1e293b;">Répondre</h3>
+				<h3 style="margin-bottom: 15px; font-size: 1.1em; color: #1e293b;"><?php echo $langs->trans('InboxReply'); ?></h3>
 				<div style="margin-bottom: 10px;">
-					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">À :</label>
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;"><?php echo $langs->trans('InboxTo'); ?></label>
 					<input type="text" id="reply-to" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
 				</div>
 				<div style="margin-bottom: 10px;">
-					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">Cc :</label>
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;"><?php echo $langs->trans('InboxCc'); ?></label>
 					<input type="text" id="reply-cc" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
 				</div>
 				<div style="margin-bottom: 15px;">
-					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;">Objet :</label>
+					<label style="display:inline-block; width: 60px; font-weight: 500; color:#64748b;"><?php echo $langs->trans('InboxSubject'); ?></label>
 					<input type="text" id="reply-subject" style="width: calc(100% - 70px); padding: 5px; border: 1px solid #cbd5e1; border-radius: 3px;">
 				</div>
 
@@ -130,8 +130,8 @@ llxHeader($head, $langs->trans($page_name));
 				<textarea id="replybody" name="replybody"></textarea>
 
 				<div style="margin-top: 15px; text-align: right;">
-					<button class="btn-primary" id="btn-cancel-reply" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 8px 16px; margin-right: 10px; cursor: pointer;">Annuler</button>
-					<button class="btn-primary" id="btn-send-reply" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 3px; cursor: pointer;">Envoyer <i class="fa fa-paper-plane" style="margin-left: 5px;"></i></button>
+					<button class="btn-primary" id="btn-cancel-reply" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 8px 16px; margin-right: 10px; cursor: pointer;"><?php echo $langs->trans('Cancel'); ?></button>
+					<button class="btn-primary" id="btn-send-reply" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 3px; cursor: pointer;"><?php echo $langs->trans('InboxSend'); ?> <i class="fa fa-paper-plane" style="margin-left: 5px;"></i></button>
 				</div>
 			</div>
 		</div>
@@ -140,32 +140,23 @@ llxHeader($head, $langs->trans($page_name));
 	<!-- Panel 4: Context / ERP Linking -->
 	<div class="inbox-panel inbox-context" id="panel-context">
 		<div class="inbox-panel-header">
-			<h3>Contexte ERP</h3>
+			<h3><?php echo $langs->trans('InboxErpContext'); ?></h3>
 		</div>
 		<div class="inbox-panel-content">
 			<div class="context-section">
-				<h4>Pièces liées</h4>
+				<h4><?php echo $langs->trans('InboxLinkedDocuments'); ?></h4>
 				<div class="linked-items">
-					<div class="linked-item tag-orange">FC-023121 <i class="fa fa-times"></i></div>
-					<div class="linked-item tag-green">CDE2606018 <i class="fa fa-times"></i></div>
 				</div>
-				<input type="text" placeholder="Lier Facture, Devis..." class="context-search">
+				<input type="text" placeholder="<?php echo dol_escape_htmltag($langs->trans('InboxLinkDocumentPlaceholder')); ?>" class="context-search">
 			</div>
 
 			<div class="context-section comments-section">
-				<h4>Commentaires internes <span class="badge">2</span></h4>
+				<h4><?php echo $langs->trans('InboxInternalComments'); ?> <span class="badge">0</span></h4>
 				<div class="comments-list">
-					<div class="comment-item">
-						<div class="comment-avatar">AB</div>
-						<div class="comment-content">
-							<div class="comment-meta"><span class="comment-author">Alice Berthelot</span> <span class="comment-date">31/03/2026 13:00</span></div>
-							<div class="comment-text">"Superbe réactivité de l'équipe commerciale ! Je valide de mon côté."</div>
-						</div>
-					</div>
 				</div>
 				<div class="comment-input-area">
-					<textarea placeholder="Ajouter un commentaire..."></textarea>
-					<button class="btn-primary">Envoyer</button>
+					<textarea placeholder="<?php echo dol_escape_htmltag($langs->trans('InboxAddComment')); ?>"></textarea>
+					<button class="btn-primary"><?php echo $langs->trans('InboxSend'); ?></button>
 				</div>
 			</div>
 		</div>

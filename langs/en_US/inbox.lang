@@ -1,0 +1,78 @@
+Inbox=Inbox
+Module104500Name=Inbox
+Module104500Desc=Native collaborative webmail for Dolibarr.
+
+# Setup / Accounts
+InboxSetup=Inbox module configuration
+InboxSetupPageDesc=Collaborative webmail configuration page. Add and manage your email accounts (IMAP/SMTP) here.
+InboxAccounts=Email accounts
+InboxAccountsList=Email account list
+AddNewAccount=Add a new email account
+AddAccount=Add account
+EditAccount=Edit account
+InboxShared=Shared account (collaborative)
+IMAPConfig=IMAP settings (incoming)
+SMTPConfig=SMTP settings (outgoing)
+IMAPServer=IMAP host
+SMTPServer=SMTP host
+TestConnection=Test IMAP/SMTP connection
+WarningTableNotExists=Warning: Database tables do not exist. Please disable then re-enable the module to force their creation.
+InboxUpdateError=Error while updating record.
+
+# Connection test
+InboxImapConnectOk=IMAP: Connection successful.
+InboxImapError=IMAP Error:
+InboxImapExtensionMissing=PHP 'imap' extension is not installed on this server.
+InboxSmtpConnectOk=SMTP: Connection successful and test email sent.
+InboxSmtpError=SMTP Error:
+
+# Sync limits
+InboxSyncLimits=Synchronization limits (IMAP)
+InboxSyncLimitNb=Maximum number of emails to synchronize
+InboxSyncLimitDays=Maximum age (in days)
+InboxSyncLimitNbDefault=Default: 500
+InboxSyncLimitDaysDefault=Default: 180 (6 months)
+
+# Global settings
+InboxGlobalSettings=Global settings
+InboxSendDelayLabel=Send cancellation delay (seconds)
+InboxSendDelayHelp=Number of seconds before the email is actually sent, allowing the user to cancel. (Default: 10)
+InboxRefreshIntervalLabel=Auto-refresh interval (seconds)
+InboxRefreshIntervalHelp=Automatic refresh of the email list. 0 = disabled. (Default: 0)
+
+# Tags admin
+InboxTags=Tags
+InboxNewTag=New tag
+InboxEditTag=Edit tag
+InboxTagCreated=Tag created successfully.
+InboxTagUpdated=Tag updated.
+InboxTagDeleted=Tag deleted.
+InboxTagLabel=Label
+InboxColor=Color
+InboxImapKeyword=IMAP Keyword
+InboxImapKeywordPlaceholder=e.g. Urgent (optional)
+InboxImapKeywordHelp=ASCII keyword without spaces — synced to the mail server if supported.
+InboxNoTagDefined=No tags defined.
+InboxConfirmDeleteTag=Delete this tag?
+
+# Main interface
+InboxNewMessage=New message
+InboxMailboxes=Mailboxes
+InboxSearchPlaceholder=Search...
+InboxErpContext=ERP Context
+InboxLinkedDocuments=Linked documents
+InboxLinkDocumentPlaceholder=Link an invoice, a quote...
+InboxInternalComments=Internal comments
+InboxAddComment=Add a comment...
+InboxReply=Reply
+InboxTo=To:
+InboxCc=Cc:
+InboxSubject=Subject:
+InboxCancelSend=Cancel sending
+InboxSend=Send
+
+# Misc
+Synchronization=Synchronization
+Parameter=Parameter
+Value=Value
+BackToModuleList=Back to module list
