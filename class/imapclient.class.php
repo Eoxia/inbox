@@ -333,6 +333,42 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
+	 * Move a message to another folder (e.g. Trash)
+	 * @param int    $msgno       Message sequence number
+	 * @param string $dest_folder Destination folder name (UTF-8)
+	 * @return bool
+	 */
+	public function moveMessage($msgno, $dest_folder)
+	{
+		if (!$this->mbox) return false;
+
+		$dest = imap_utf7_encode($dest_folder);
+		if (!imap_mail_move($this->mbox, (string)$msgno, $dest)) {
+			$this->error = "Failed to move message: " . imap_last_error();
+			return false;
+		}
+		imap_expunge($this->mbox);
+		return true;
+	}
+
+	/**
+	 * Permanently delete a message (mark \Deleted + expunge)
+	 * @param int $msgno Message sequence number
+	 * @return bool
+	 */
+	public function deleteMessage($msgno)
+	{
+		if (!$this->mbox) return false;
+
+		if (!imap_delete($this->mbox, (string)$msgno)) {
+			$this->error = "Failed to delete message: " . imap_last_error();
+			return false;
+		}
+		imap_expunge($this->mbox);
+		return true;
+	}
+
+	/**
 	 * Append a message to a specific folder (e.g. Sent folder)
 	 * @param string $folder   Destination folder name
 	 * @param string $message  Raw MIME message string

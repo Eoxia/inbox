@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	let currentEmail = null;
 	let currentEmailBody = '';
 	let currentFolder = 'INBOX';
+	let trashFolder = null; // detected from folder list
 
 	// Pagination state
 	let emailPage = 0;
@@ -45,8 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
 				}
 				
 				data.data.forEach(f => {
+					if (f.type === 'trash' && !trashFolder) trashFolder = f.id;
+
 					const li = document.createElement('li');
-					
+
 					let icon = 'fa-folder';
 					if (f.type == 'inbox') icon = 'fa-inbox';
 					else if (f.type == 'sent') icon = 'fa-paper-plane';
@@ -261,6 +264,41 @@ document.addEventListener('DOMContentLoaded', () => {
 				fetchEmails();
 			}
 		}, refreshInterval * 1000);
+	}
+
+	// Trash button
+	const btnTrashEl = document.querySelector('.header-actions .fa-trash');
+	if (btnTrashEl) {
+		btnTrashEl.parentElement.addEventListener('click', () => {
+			if (!currentEmail) return;
+
+			const formData = new URLSearchParams();
+			formData.append('msgno', currentEmail.msgno);
+			formData.append('folder', currentFolder);
+			if (trashFolder && trashFolder !== currentFolder) {
+				formData.append('trash_folder', trashFolder);
+			}
+
+			fetch('../../custom/inbox/ajax/trash_email.php', {
+				method: 'POST',
+				body: formData
+			})
+			.then(res => res.json())
+			.then(data => {
+				if (data.error) {
+					setEventMessage(data.error, 'errors');
+					console.error('Trash error:', data.error);
+					return;
+				}
+				// Remove the item from the list and clear the view panel
+				document.querySelectorAll('.email-item.active').forEach(el => el.remove());
+				document.getElementById('panel-view').style.display = 'none';
+				document.getElementById('reply-form-container').style.display = 'none';
+				currentEmail = null;
+				currentEmailBody = '';
+			})
+			.catch(err => console.error('Trash fetch error:', err));
+		});
 	}
 
 	// Reply logic
