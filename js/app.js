@@ -117,6 +117,26 @@ document.addEventListener('DOMContentLoaded', () => {
 			document.querySelector('.sender-name').innerHTML = `${email.from} <a href="#" class="link-erp"><i class="fa fa-user"></i> Contact</a>`;
 			document.querySelector('.email-view-date').innerText = email.date;
 
+			// Recipients
+			const senderEmailEl = document.querySelector('.sender-email');
+			if (senderEmailEl) {
+				let recipientHtml = '';
+				if (email.to) recipientHtml += '<span style="color:#64748b;">À :</span> ' + email.to;
+				if (email.cc) recipientHtml += '<br><span style="color:#64748b;">Cc :</span> ' + email.cc;
+				senderEmailEl.innerHTML = recipientHtml;
+			}
+
+			// Sender avatar initials
+			const avatarEl = document.querySelector('.sender-avatar');
+			if (avatarEl) {
+				const namePart = email.from.replace(/<[^>]+>/, '').trim() || email.from;
+				const words = namePart.trim().split(/\s+/);
+				const initials = words.length >= 2
+					? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+					: namePart.slice(0, 2).toUpperCase();
+				avatarEl.textContent = initials;
+			}
+
 			const bodyContainer = document.querySelector('.email-view-body');
 			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
 

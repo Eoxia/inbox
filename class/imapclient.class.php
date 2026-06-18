@@ -114,6 +114,12 @@ dol_syslog($conn_string, LOG_NOTICE);
 					$from = isset($overview->from) ? $overview->from : '';
 					$item->from = $this->decodeMimeHeader($from);
 
+					$to = isset($overview->to) ? $overview->to : '';
+					$item->to = $this->decodeMimeHeader($to);
+
+					$cc = isset($overview->cc) ? $overview->cc : '';
+					$item->cc = $this->decodeMimeHeader($cc);
+
 					$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
 					$item->seen     = (isset($overview->seen)     && $overview->seen)     ? 1 : 0;
 					$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
