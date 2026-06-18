@@ -765,6 +765,10 @@ document.addEventListener('DOMContentLoaded', () => {
 				tagPickerWrapper.style.display = 'none';
 			} else {
 				buildTagPicker(currentEmail ? currentEmail.message_id : null);
+				// Position fixed relative to the button (escapes overflow:auto clipping)
+				const rect = btnAddTag.getBoundingClientRect();
+				tagPickerWrapper.style.top  = (rect.bottom + 4) + 'px';
+				tagPickerWrapper.style.left = rect.left + 'px';
 				tagPickerWrapper.style.display = 'block';
 			}
 		});
