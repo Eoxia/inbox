@@ -290,12 +290,28 @@ document.addEventListener('DOMContentLoaded', () => {
 					console.error('Trash error:', data.error);
 					return;
 				}
-				// Remove the item from the list and clear the view panel
-				document.querySelectorAll('.email-item.active').forEach(el => el.remove());
-				document.getElementById('panel-view').style.display = 'none';
+				// Find next email to display before removing the active item
+				const activeEl = document.querySelector('.email-item.active');
+				let nextEl = null;
+				if (activeEl) {
+					// Try next sibling email, then previous
+					let sib = activeEl.nextElementSibling;
+					while (sib && !sib.classList.contains('email-item')) sib = sib.nextElementSibling;
+					if (!sib) {
+						sib = activeEl.previousElementSibling;
+						while (sib && !sib.classList.contains('email-item')) sib = sib.previousElementSibling;
+					}
+					nextEl = sib;
+					activeEl.remove();
+				}
 				document.getElementById('reply-form-container').style.display = 'none';
 				currentEmail = null;
 				currentEmailBody = '';
+				if (nextEl) {
+					nextEl.click();
+				} else {
+					document.getElementById('panel-view').style.display = 'none';
+				}
 			})
 			.catch(err => console.error('Trash fetch error:', err));
 		});
