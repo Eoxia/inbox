@@ -2,50 +2,94 @@
 /**
  *	\file       class/inboxaccount.class.php
  *	\ingroup    inbox
- *	\brief      Class to manage Inbox Accounts
+ *	\brief      Class to manage email accounts (IMAP + SMTP settings)
  */
 
 require_once DOL_DOCUMENT_ROOT .'/core/class/commonobject.class.php';
 
+/**
+ * Stores IMAP and SMTP connection parameters for one mailbox.
+ * A shared account (shared=1) is visible to all internal users.
+ * A personal account (fk_user set) is only offered to its owner.
+ */
 class InboxAccount extends CommonObject
 {
-	/**
-	 * @var string ID to identify managed object
-	 */
+	/** @var string  Dolibarr element identifier */
 	public $element = 'inboxaccount';
 
-	/**
-	 * @var string Name of table without prefix where object is stored
-	 */
+	/** @var string  Database table name without llx_ prefix */
 	public $table_element = 'inbox_account';
 
+	/** @var int     Row id (alias of $id for legacy access) */
 	public $rowid;
+
+	/** @var string  Human-readable label for this account */
 	public $label;
+
+	/** @var string  Sender email address */
 	public $email;
+
+	/** @var string  IMAP server hostname or IP */
 	public $imap_server;
+
+	/** @var int     IMAP port (typically 993 for SSL, 143 otherwise) */
 	public $imap_port;
+
+	/** @var string  IMAP transport security: 'ssl', 'tls', or 'none' */
 	public $imap_security;
+
+	/** @var string  IMAP login (often the email address) */
 	public $imap_login;
+
+	/** @var string  IMAP password (stored encrypted at rest) */
 	public $imap_password;
+
+	/** @var string  SMTP server hostname or IP */
 	public $smtp_server;
+
+	/** @var int     SMTP port (typically 465/587) */
 	public $smtp_port;
+
+	/** @var string  SMTP transport security: 'ssl', 'tls', or 'none' */
 	public $smtp_security;
+
+	/** @var string  SMTP login */
 	public $smtp_login;
+
+	/** @var string  SMTP password */
 	public $smtp_password;
+
+	/** @var int     1 = accept self-signed TLS certificates */
 	public $allow_self_signed;
+
+	/** @var string  HTML signature appended to outgoing messages */
 	public $signature;
+
+	/** @var int|null  Owner user id; NULL means shared across all users */
 	public $fk_user;
+
+	/** @var int     Maximum number of messages to fetch in one sync */
 	public $sync_limit_nb = 500;
+
+	/** @var int     Only fetch messages newer than this many days */
 	public $sync_limit_days = 180;
+
+	/** @var int     1 = account is visible to all internal users */
 	public $shared;
+
+	/** @var int     1 = active, 0 = disabled */
 	public $status;
+
+	/** @var string  Creation date (YYYY-MM-DD HH:MM:SS) */
 	public $date_creation;
+
+	/** @var string  Last modification timestamp (managed by MariaDB ON UPDATE) */
 	public $tms;
-	
+
 	/**
-	 *  Constructor
+	 * Constructor.
 	 *
-	 *  @param      DoliDb		$db      Database handler
+	 * @param DoliDB $db  Database handler
 	 */
 	public function __construct($db)
 	{
@@ -53,11 +97,11 @@ class InboxAccount extends CommonObject
 	}
 
 	/**
-	 *  Create object into database
+	 * Insert a new account row into the database.
 	 *
-	 *  @param      User	$user        User that creates
-	 *  @param      int		$notrigger   0=launch triggers after, 1=disable triggers
-	 *  @return     int      		   	 <0 if KO, Id of created object if OK
+	 * @param  User $user       User performing the action (for audit trail)
+	 * @param  int  $notrigger  0 = fire triggers, 1 = skip triggers
+	 * @return int              Row id on success, -1 on failure ($this->errors is populated)
 	 */
 	public function create($user, $notrigger = 0)
 	{
@@ -111,10 +155,10 @@ class InboxAccount extends CommonObject
 	}
 
 	/**
-	 *  Load object in memory from the database
+	 * Load an account record from the database into this object.
 	 *
-	 *  @param      int		$id    Id object
-	 *  @return     int          <0 if KO, 0 if not found, >0 if OK
+	 * @param  int $id  Row id to load
+	 * @return int      1 if found, 0 if not found, -1 on SQL error
 	 */
 	public function fetch($id)
 	{

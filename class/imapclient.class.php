@@ -2,27 +2,40 @@
 /**
  *	\file       class/imapclient.class.php
  *	\ingroup    inbox
- *	\brief      Class to handle IMAP connections and retrieve emails
+ *	\brief      Thin wrapper around the PHP IMAP extension for the Inbox module
  */
 
+/**
+ * Handles IMAP connections and all mailbox operations: listing folders,
+ * fetching message headers/bodies/attachments, moving and deleting messages.
+ *
+ * All message references use IMAP UIDs (not sequence numbers) so that
+ * imap_expunge() calls never invalidate open references.
+ */
 class IMAPClient
 {
+	/** @var resource|false  Active IMAP stream returned by imap_open() */
 	private $mbox;
+
+	/** @var string  Last error message set by any method */
 	public $error;
+
+	/** @var string[]  Accumulated error strings (not currently used externally) */
 	public $errors = array();
 
+	/** @var string  Connection string without folder suffix, e.g. "{mail.example.com:993/imap/ssl}" */
 	public $conn_string_base = '';
 
 	/**
-	 * Connect to IMAP server
+	 * Open an IMAP stream to the given server and folder.
 	 *
-	 * @param string $host      IMAP server host
-	 * @param int    $port      IMAP server port
-	 * @param string $security  'ssl', 'starttls', 'none'
-	 * @param string $login     Username
-	 * @param string $password  Password
-	 * @param string $folder    Folder name
-	 * @return bool             True if connected, False if error
+	 * @param string $host      IMAP server hostname or IP
+	 * @param int    $port      IMAP port (143, 993, …)
+	 * @param string $security  Transport security: 'ssl', 'starttls'/'tls', or 'none'
+	 * @param string $login     Account username
+	 * @param string $password  Account password
+	 * @param string $folder    Mailbox folder to open (default: 'INBOX')
+	 * @return bool             True on success, false on failure ($this->error is set)
 	 */
 	public function connect($host, $port, $security, $login, $password, $folder = 'INBOX')
 	{
@@ -44,22 +57,18 @@ class IMAPClient
 		$conn_string .= "}";
 		$this->conn_string_base = $conn_string;
 
-		// Map simple names to standard IMAP folder encoding if needed
 		if (strtoupper($folder) != 'INBOX') {
-			// Convert encoding to modified UTF-7 for IMAP folder names
 			$folder = imap_utf7_encode($folder);
 		}
-dol_syslog($conn_string, LOG_NOTICE);
+
 		$conn_string .= $folder;
 
-		// Clear previous errors
 		imap_errors();
 
 		$this->mbox = @imap_open($conn_string, $login, $password);
 
 		if (!$this->mbox) {
 			$errors = imap_errors();
-
 			$this->error = "Failed to connect to IMAP server. " . ($errors ? implode(', ', $errors) : "Unknown error");
 			return false;
 		}
@@ -68,11 +77,19 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Retrieve a list of messages headers
+	 * Return a paginated list of message headers from the current folder.
 	 *
-	 * @param int $limit_nb    Max number of messages to fetch
-	 * @param int $limit_days  Max age in days
-	 * @return array|bool      Array of message objects or false on error
+	 * Uses SE_UID / FT_UID throughout so UIDs are stable across expunge operations.
+	 * Messages are sorted newest-first by UID before pagination is applied.
+	 *
+	 * @param int $limit_nb    Maximum total messages to consider (pool size)
+	 * @param int $limit_days  Only consider messages newer than this many days
+	 * @param int $offset      Zero-based index of the first message to return
+	 * @param int $page_size   Number of messages per page
+	 * @return array|false     ['messages' => stdClass[], 'total' => int, 'has_more' => bool]
+	 *                         or false if not connected.
+	 *                         Each message object has: uid, message_id, subject, from, to, cc,
+	 *                         date, seen, answered, deleted.
 	 */
 	public function getMessages($limit_nb = 500, $limit_days = 180, $offset = 0, $page_size = 50)
 	{
@@ -137,9 +154,10 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Decode MIME headers
-	 * @param string $string
-	 * @return string
+	 * Decode an encoded MIME header value (e.g. =?UTF-8?B?...?=) to a UTF-8 string.
+	 *
+	 * @param string $string  Raw header value
+	 * @return string         UTF-8 decoded string
 	 */
 	private function decodeMimeHeader($string)
 	{
@@ -161,9 +179,14 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Return list of attachments for a message
+	 * Return the list of attachments for a message.
+	 *
+	 * Walks the MIME tree recursively. Inline text/plain and text/html parts
+	 * are excluded even when they carry a filename.
+	 *
 	 * @param int $uid  Message UID
-	 * @return array  Each element: ['partno', 'filename', 'mime', 'size', 'encoding']
+	 * @return array    Each element: ['partno' => string, 'filename' => string,
+	 *                  'mime' => string, 'size' => int, 'encoding' => int]
 	 */
 	public function getAttachments($uid)
 	{
@@ -174,6 +197,14 @@ dol_syslog($conn_string, LOG_NOTICE);
 		return $attachments;
 	}
 
+	/**
+	 * Recursive MIME-tree walker that collects attachment descriptors.
+	 *
+	 * @param object $structure   imap_fetchstructure() part object
+	 * @param array  &$attachments Accumulator array (passed by reference)
+	 * @param string $partno      Dotted MIME part number, e.g. "1.2" (empty for root)
+	 * @return void
+	 */
 	private function findAttachments($structure, &$attachments, $partno)
 	{
 		if (!$structure) return;
@@ -222,11 +253,12 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Fetch decoded bytes for one MIME part (for attachment download)
-	 * @param int    $uid
-	 * @param string $partno  e.g. "2" or "1.2"
-	 * @param int    $encoding  IMAP encoding constant (3=base64, 4=qp)
-	 * @return string
+	 * Fetch and decode the raw bytes of a single MIME part (for attachment download).
+	 *
+	 * @param int    $uid       Message UID
+	 * @param string $partno    Dotted MIME part number, e.g. "2" or "1.2"
+	 * @param int    $encoding  IMAP encoding constant (3 = BASE64, 4 = QUOTED-PRINTABLE)
+	 * @return string           Decoded binary data, or empty string on failure
 	 */
 	public function getAttachmentData($uid, $partno, $encoding)
 	{
@@ -238,10 +270,13 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Retrieve message body (HTML preferred, else plain text)
+	 * Return the decoded body of a message, preferring HTML over plain text.
 	 *
-	 * @param int $msgno Message number
-	 * @return string
+	 * Falls back to imap_body() if the MIME structure yields nothing.
+	 * Plain-text bodies are converted to HTML via nl2br + htmlspecialchars.
+	 *
+	 * @param int $uid  Message UID
+	 * @return string   HTML or plain-text body, empty string on failure
 	 */
 	public function getMessageBody($uid)
 	{
@@ -264,6 +299,19 @@ dol_syslog($conn_string, LOG_NOTICE);
 		return $body;
 	}
 
+	/**
+	 * Recursively search the MIME tree for a part matching $mimeType.
+	 *
+	 * For multipart/alternative containers the first matching subpart is returned.
+	 * For other multipart types the tree is traversed depth-first.
+	 *
+	 * @param resource $mbox        Active IMAP stream
+	 * @param int      $uid         Message UID
+	 * @param string   $mimeType    MIME type to find, e.g. "TEXT/HTML"
+	 * @param object   $structure   imap_fetchstructure() part object
+	 * @param string   $partNumber  Current dotted part number (empty at root)
+	 * @return string|false         Decoded content or false if not found
+	 */
 	private function getPart($mbox, $uid, $mimeType, $structure, $partNumber = false)
 	{
 		if (!$structure) return false;
@@ -292,6 +340,12 @@ dol_syslog($conn_string, LOG_NOTICE);
 		return false;
 	}
 
+	/**
+	 * Build a "TYPE/SUBTYPE" MIME string from an imap_fetchstructure() part object.
+	 *
+	 * @param object $structure  imap_fetchstructure() part object
+	 * @return string            e.g. "TEXT/HTML", "APPLICATION/PDF"
+	 */
 	private function getMimeType($structure)
 	{
 		$primary = array("TEXT", "MULTIPART", "MESSAGE", "APPLICATION", "AUDIO", "IMAGE", "VIDEO", "OTHER");
@@ -301,6 +355,14 @@ dol_syslog($conn_string, LOG_NOTICE);
 		return "TEXT/PLAIN";
 	}
 
+	/**
+	 * Decode a raw MIME part body and convert it to UTF-8.
+	 *
+	 * @param string      $body        Raw bytes from imap_fetchbody()
+	 * @param int         $encoding    IMAP encoding constant (3=BASE64, 4=QUOTED-PRINTABLE)
+	 * @param object[]|null $parameters MIME parameters array (used to read charset)
+	 * @return string                  UTF-8 decoded body
+	 */
 	private function decodeBody($body, $encoding, $parameters)
 	{
 		if ($encoding == 4) {
@@ -327,8 +389,15 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Retrieve all folders/mailboxes
-	 * @return array
+	 * Return all folders/mailboxes for the current account, sorted by conventional order
+	 * (Inbox → Sent → Drafts → Archive → Spam → Trash → other folders alphabetically).
+	 *
+	 * Folder names are decoded from IMAP modified UTF-7 to UTF-8 and translated
+	 * to French for standard mailbox names (Inbox, Sent, Drafts, Trash, Spam, Archive).
+	 *
+	 * @return array  Each element: ['id' => string (raw IMAP name),
+	 *                'name' => string (display name, UTF-8),
+	 *                'type' => string (inbox|sent|drafts|trash|spam|archive|folder)]
 	 */
 	public function getFolders()
 	{
@@ -350,7 +419,6 @@ dol_syslog($conn_string, LOG_NOTICE);
 					$cleanName = mb_scrub($name);
 				}
 
-				// Standardize icon/type mapping based on common names
 				$type = 'folder';
 				$lower = strtolower($cleanName);
 				if ($lower == 'inbox') $type = 'inbox';
@@ -360,13 +428,10 @@ dol_syslog($conn_string, LOG_NOTICE);
 				elseif (strpos($lower, 'spam') !== false || strpos($lower, 'junk') !== false || strpos($lower, 'pourriel') !== false) $type = 'spam';
 				elseif (strpos($lower, 'archive') !== false) $type = 'archive';
 
-				// Clean display name
-				// Remove "INBOX." prefix if present
 				if (stripos($cleanName, 'INBOX.') === 0) {
 					$cleanName = substr($cleanName, 6);
 				}
 
-				// Translate standard names
 				if ($type == 'inbox' && strtolower($cleanName) == 'inbox') $cleanName = 'Boîte de réception';
 				elseif ($type == 'sent' && strtolower($cleanName) == 'sent') $cleanName = 'Envoyés';
 				elseif ($type == 'drafts' && strtolower($cleanName) == 'drafts') $cleanName = 'Brouillons';
@@ -381,7 +446,6 @@ dol_syslog($conn_string, LOG_NOTICE);
 				);
 			}
 
-			// Sort folders: Inbox, Sent, Drafts, then others
 			usort($folders, function($a, $b) {
 				$order = array(
 					'inbox' => 1,
@@ -407,10 +471,14 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Move a message to another folder (e.g. Trash)
-	 * @param int    $msgno       Message sequence number
+	 * Move a message to another folder (e.g. Trash).
+	 *
+	 * Uses CP_UID so $uid is treated as a UID, not a sequence number.
+	 * Calls imap_expunge() immediately so the source folder is cleaned up.
+	 *
+	 * @param int    $uid         Message UID
 	 * @param string $dest_folder Destination folder name (UTF-8)
-	 * @return bool
+	 * @return bool               True on success, false on failure ($this->error is set)
 	 */
 	public function moveMessage($uid, $dest_folder)
 	{
@@ -427,9 +495,12 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Permanently delete a message (mark \Deleted + expunge)
-	 * @param int $uid Message UID
-	 * @return bool
+	 * Permanently delete a message (mark \Deleted + expunge).
+	 *
+	 * Uses FT_UID so $uid is treated as a UID, not a sequence number.
+	 *
+	 * @param int $uid  Message UID
+	 * @return bool     True on success, false on failure ($this->error is set)
 	 */
 	public function deleteMessage($uid)
 	{
@@ -445,10 +516,11 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Append a message to a specific folder (e.g. Sent folder)
-	 * @param string $folder   Destination folder name
-	 * @param string $message  Raw MIME message string
-	 * @return bool
+	 * Append a raw MIME message to a folder (used to save a copy in Sent).
+	 *
+	 * @param string $folder   Destination folder name (UTF-8)
+	 * @param string $message  Complete raw MIME message string
+	 * @return bool            True on success, false on failure ($this->error is set)
 	 */
 	public function appendMessage($folder, $message)
 	{
@@ -466,7 +538,9 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
-	 * Disconnect from IMAP server
+	 * Close the IMAP stream.
+	 *
+	 * @return void
 	 */
 	public function close()
 	{

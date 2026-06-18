@@ -2,43 +2,90 @@
 /**
  *	\file       class/inboxcomment.class.php
  *	\ingroup    inbox
- *	\brief      Class to manage internal comments on emails
+ *	\brief      Class to manage internal comments attached to emails
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
 
+/**
+ * Stores internal (private) team comments tied to an email.
+ *
+ * An email is identified by its RFC 2822 Message-ID header when available
+ * (stable across IMAP folder moves) or by (fk_account, message_uid) as a
+ * fallback for rows created before Message-ID support was added.
+ *
+ * Soft deletion is used (status=0) so comments are never physically removed.
+ */
 class InboxComment extends CommonObject
 {
-	public $element       = 'inboxcomment';
+	/** @var string  Dolibarr element identifier */
+	public $element = 'inboxcomment';
+
+	/** @var string  Database table name without llx_ prefix */
 	public $table_element = 'inbox_comment';
 
+	/** @var int     Row id */
 	public $rowid;
+
+	/** @var int     Dolibarr entity (multi-company) */
 	public $entity;
+
+	/** @var int     Foreign key to llx_inbox_account */
 	public $fk_account;
+
+	/** @var string  IMAP folder name at the time the comment was created (informational only) */
 	public $folder;
+
+	/** @var int     IMAP UID of the message at creation time */
 	public $message_uid;
+
+	/** @var string|null  RFC 2822 Message-ID header; preferred lookup key (stable across folder moves) */
 	public $message_id;
+
+	/** @var string  Comment body text */
 	public $comment;
+
+	/** @var int     1 = visible, 0 = soft-deleted */
 	public $status;
+
+	/** @var int     User id of the author */
 	public $fk_user_creat;
+
+	/** @var int|null  User id of the last modifier */
 	public $fk_user_modif;
+
+	/** @var string  Creation datetime (YYYY-MM-DD HH:MM:SS) */
 	public $date_creation;
+
+	/** @var string  Last modification timestamp (managed by MariaDB ON UPDATE) */
 	public $tms;
 
-	// Populated on fetch (joined from llx_user)
+	// Populated by fetchByMessage() via LEFT JOIN on llx_user
+	/** @var string  Author login */
 	public $user_login;
+	/** @var string  Author first name */
 	public $user_firstname;
+	/** @var string  Author last name */
 	public $user_lastname;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param DoliDB $db  Database handler
+	 */
 	public function __construct($db)
 	{
 		$this->db = $db;
 	}
 
 	/**
-	 * Create a comment
-	 * @param  User $user
-	 * @return int  rowid if OK, <0 if KO
+	 * Insert a new comment row and return its id.
+	 *
+	 * All scalar properties (fk_account, folder, message_uid, message_id, comment,
+	 * entity) must be set on $this before calling.
+	 *
+	 * @param  User $user  User performing the action (stored as fk_user_creat)
+	 * @return int         Row id on success, -1 on SQL error ($this->error is set)
 	 */
 	public function create($user)
 	{
@@ -67,19 +114,28 @@ class InboxComment extends CommonObject
 	}
 
 	/**
-	 * Fetch all active comments for an email, newest last.
-	 * Searches by message_id when provided (stable across folder moves),
-	 * falls back to (fk_account, message_uid) for legacy rows without message_id.
+	 * Return all active comments for a given email, ordered chronologically.
 	 *
-	 * @param  int    $fk_account
-	 * @param  string $folder       Stored for info only, not used for filtering
-	 * @param  int    $message_uid
-	 * @param  int    $entity
-	 * @param  string $message_id   RFC 2822 Message-ID header (preferred key)
-	 * @return array  of InboxComment objects, or empty array
+	 * Lookup strategy:
+	 * - If $message_id is non-empty, search by (fk_account, message_id, entity).
+	 *   This survives IMAP folder moves because the RFC 2822 Message-ID is stable.
+	 * - Otherwise fall back to (fk_account, message_uid, entity), which works for
+	 *   legacy rows that pre-date Message-ID storage.
+	 *
+	 * Each returned object also carries user_login, user_firstname, user_lastname
+	 * from a LEFT JOIN on llx_user.
+	 *
+	 * @param  int    $fk_account   Account row id
+	 * @param  string $folder       Folder name (not used for filtering, kept for signature compat)
+	 * @param  int    $message_uid  IMAP UID of the message
+	 * @param  int    $entity       Dolibarr entity id
+	 * @param  string $message_id   RFC 2822 Message-ID header (preferred; empty for legacy fallback)
+	 * @return InboxComment[]       Array of InboxComment objects (may be empty)
 	 */
 	public function fetchByMessage($fk_account, $folder, $message_uid, $entity = 1, $message_id = '')
 	{
+		(void) $folder; // kept in signature for API compatibility; not used for filtering (see docblock)
+
 		if (!empty($message_id)) {
 			$where = "c.fk_account = ".((int)$fk_account)."
 			  AND c.message_id = '".$this->db->escape($message_id)."'
@@ -128,10 +184,14 @@ class InboxComment extends CommonObject
 	}
 
 	/**
-	 * Soft-delete a comment (sets status=0)
-	 * @param  User $user
-	 * @param  int  $rowid
-	 * @return int  1 if OK, <0 if KO
+	 * Soft-delete a comment by setting status = 0.
+	 *
+	 * Only the comment's author or an admin may delete it.
+	 * Returns -2 (rather than -1) when the row exists but the caller lacks permission.
+	 *
+	 * @param  User $user   User performing the deletion
+	 * @param  int  $rowid  Comment row id to delete
+	 * @return int          1 on success, -1 on SQL error, -2 if permission denied
 	 */
 	public function deleteComment($user, $rowid)
 	{
