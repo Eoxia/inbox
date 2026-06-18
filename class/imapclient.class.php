@@ -159,6 +159,111 @@ dol_syslog($conn_string, LOG_NOTICE);
 	}
 
 	/**
+	 * Return list of attachments for a message
+	 * @param int $msgno
+	 * @return array  Each element: ['partno', 'filename', 'mime', 'size']
+	 */
+	public function getAttachments($msgno)
+	{
+		if (!$this->mbox) return array();
+		$structure = @imap_fetchstructure($this->mbox, $msgno);
+		$attachments = array();
+		$this->findAttachments($msgno, $structure, $attachments, '');
+		return $attachments;
+	}
+
+	private function findAttachments($msgno, $structure, &$attachments, $partno)
+	{
+		if (!$structure) return;
+
+		if ($structure->type == 1) { // MULTIPART
+			foreach ($structure->parts as $index => $subStruct) {
+				$sub = $partno ? $partno.'.'.($index + 1) : (string)($index + 1);
+				$this->findAttachments($msgno, $subStruct, $attachments, $sub);
+			}
+			return;
+		}
+
+		// Collect filename from Content-Disposition params first, then Content-Type params
+		$filename = '';
+		if (!empty($structure->dparameters)) {
+			foreach ($structure->dparameters as $p) {
+				if (strtolower($p->attribute) == 'filename') {
+					$filename = $this->decodeMimeHeader($p->value);
+					break;
+				}
+			}
+		}
+		if (empty($filename) && !empty($structure->parameters)) {
+			foreach ($structure->parameters as $p) {
+				if (strtolower($p->attribute) == 'name') {
+					$filename = $this->decodeMimeHeader($p->value);
+					break;
+				}
+			}
+		}
+
+		if (empty($filename)) return;
+
+		// Skip inline text parts — those are the email body
+		$disposition = isset($structure->disposition) ? strtolower($structure->disposition) : '';
+		if ($disposition === 'inline' && $structure->type === 0
+			&& in_array(strtolower($structure->subtype), array('html', 'plain'))) {
+			return;
+		}
+
+		$attachments[] = array(
+			'partno'   => $partno ?: '1',
+			'filename' => $filename,
+			'mime'     => $this->getMimeType($structure),
+			'size'     => isset($structure->bytes) ? (int)$structure->bytes : 0,
+		);
+	}
+
+	/**
+	 * Fetch raw bytes for one MIME part (for attachment download)
+	 * @param int    $msgno
+	 * @param string $partno  e.g. "2" or "1.2"
+	 * @param int    $encoding  IMAP encoding constant
+	 * @return string
+	 */
+	public function getAttachmentData($msgno, $partno, $encoding)
+	{
+		if (!$this->mbox) return '';
+		$raw = @imap_fetchbody($this->mbox, $msgno, $partno);
+		if ($encoding == 3) return base64_decode($raw);
+		if ($encoding == 4) return quoted_printable_decode($raw);
+		return $raw;
+	}
+
+	/**
+	 * Return encoding constant for a specific part
+	 * @param int    $msgno
+	 * @param string $partno
+	 * @return int
+	 */
+	public function getPartEncoding($msgno, $partno)
+	{
+		$structure = @imap_fetchstructure($this->mbox, $msgno);
+		return $this->findPartEncoding($structure, explode('.', $partno));
+	}
+
+	private function findPartEncoding($structure, $path)
+	{
+		$idx = (int)array_shift($path) - 1;
+		if (!empty($path)) {
+			if (isset($structure->parts[$idx])) {
+				return $this->findPartEncoding($structure->parts[$idx], $path);
+			}
+			return 0;
+		}
+		if ($structure->type == 1 && isset($structure->parts[$idx])) {
+			return $structure->parts[$idx]->encoding;
+		}
+		return $structure->encoding ?? 0;
+	}
+
+	/**
 	 * Retrieve message body (HTML preferred, else plain text)
 	 *
 	 * @param int $msgno Message number

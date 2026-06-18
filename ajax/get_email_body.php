@@ -4,7 +4,16 @@
  *	\ingroup    inbox
  *	\brief      Ajax endpoint to retrieve a specific email body
  */
-
+if (!defined('NOTOKENRENEWAL')) {
+	// Disables token renewal
+	define('NOTOKENRENEWAL', 1);
+}
+if (!defined('NOREQUIREMENU')) {
+	define('NOREQUIREMENU', '1');
+}
+if (!defined('NOCSRFCHECK')) {
+	define('NOCSRFCHECK', '1');
+}
 $res = 0;
 if (!($res && preg_match('/^http/', $res))) {
 	$res = @include '../../main.inc.php';
@@ -64,10 +73,10 @@ if (empty($folder)) {
 
 $client = new IMAPClient();
 $connected = $client->connect(
-	$account->imap_server, 
-	$account->imap_port, 
-	$account->imap_security, 
-	$account->imap_login, 
+	$account->imap_server,
+	$account->imap_port,
+	$account->imap_security,
+	$account->imap_login,
 	$account->imap_password,
 	$folder
 );
@@ -77,13 +86,15 @@ if (!$connected) {
 	exit;
 }
 
-$body = $client->getMessageBody($msgno);
+$body        = $client->getMessageBody($msgno);
+$attachments = $client->getAttachments($msgno);
 
 $client->close();
 
 $json = json_encode(array(
-	'success' => true,
-	'body' => $body
+	'success'     => true,
+	'body'        => $body,
+	'attachments' => $attachments,
 ), JSON_INVALID_UTF8_SUBSTITUTE);
 
 if (!$json) {

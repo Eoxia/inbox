@@ -120,6 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			const bodyContainer = document.querySelector('.email-view-body');
 			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
 
+			// Clear previous attachment list
+			const existingAttachBar = document.getElementById('email-attachment-bar');
+			if (existingAttachBar) existingAttachBar.remove();
+
 			fetch('../../custom/inbox/ajax/get_email_body.php?msgno=' + email.msgno + '&folder=' + encodeURIComponent(currentFolder))
 				.then(res => {
 					if (!res.ok) throw new Error("HTTP error " + res.status);
@@ -132,6 +136,29 @@ document.addEventListener('DOMContentLoaded', () => {
 					} else {
 						bodyContainer.innerHTML = bodyData.body;
 						currentEmailBody = bodyData.body;
+					}
+					// Render attachment list
+					if (bodyData.attachments && bodyData.attachments.length > 0) {
+						const bar = document.createElement('div');
+						bar.id = 'email-attachment-bar';
+						bar.style.cssText = 'padding: 10px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;';
+						bar.innerHTML = '<span style="color:#64748b; font-size:0.85em; margin-right:4px;"><i class="fa fa-paperclip"></i> Pièces jointes :</span>';
+						bodyData.attachments.forEach(att => {
+							const kb = att.size > 0 ? ' (' + (att.size > 1048576 ? (att.size / 1048576).toFixed(1) + ' Mo' : Math.ceil(att.size / 1024) + ' Ko') + ')' : '';
+							const url = '../../custom/inbox/ajax/get_attachment.php'
+								+ '?msgno=' + encodeURIComponent(email.msgno)
+								+ '&partno=' + encodeURIComponent(att.partno)
+								+ '&encoding=' + encodeURIComponent(att.encoding || 0)
+								+ '&folder=' + encodeURIComponent(currentFolder)
+								+ '&filename=' + encodeURIComponent(att.filename);
+							const chip = document.createElement('a');
+							chip.href = url;
+							chip.target = '_blank';
+							chip.style.cssText = 'display:inline-flex; align-items:center; gap:4px; padding:4px 10px; background:#fff; border:1px solid #cbd5e1; border-radius:20px; font-size:0.82em; color:#1e293b; text-decoration:none; white-space:nowrap;';
+							chip.innerHTML = '<i class="fa fa-file-o"></i> ' + att.filename + '<span style="color:#94a3b8;">' + kb + '</span>';
+							bar.appendChild(chip);
+						});
+						bodyContainer.parentElement.insertBefore(bar, bodyContainer.nextSibling);
 					}
 				})
 				.catch(err => {
