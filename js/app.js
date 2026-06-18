@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	// Fetch emails from IMAP via AJAX — reset=true replaces the list, false appends next page
 	const fetchEmails = (reset = true) => {
+		console.log('[inbox scroll] fetchEmails called — reset:', reset, '| page:', emailPage, '| loading:', emailsLoading, '| hasMore:', emailsHasMore);
 		if (emailsLoading) return;
 		emailsLoading = true;
 
@@ -207,10 +208,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 				emailsHasMore = data.has_more;
 				emailPage++;
+				console.log('[inbox scroll] page loaded — page now:', emailPage, '| total:', data.total, '| hasMore:', emailsHasMore, '| count:', data.count);
 				// Re-arm: if sentinel is still visible, observer won't fire again unless we unobserve+observe
 				if (scrollObserver) {
 					scrollObserver.unobserve(emailSentinel);
 					if (emailsHasMore) scrollObserver.observe(emailSentinel);
+					console.log('[inbox scroll] observer re-armed, hasMore:', emailsHasMore);
 				}
 			})
 			.catch(err => {
@@ -237,11 +240,14 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Re-armed after each page load so it fires again when sentinel remains visible
 	// (handles both "content doesn't fill the container" and "user scrolls to bottom").
 	scrollObserver = new IntersectionObserver((entries) => {
-		if (entries[0].isIntersecting && !emailsLoading && emailsHasMore) {
+		const e = entries[0];
+		console.log('[inbox scroll] observer fired — intersecting:', e.isIntersecting, '| loading:', emailsLoading, '| hasMore:', emailsHasMore);
+		if (e.isIntersecting && !emailsLoading && emailsHasMore) {
 			fetchEmails(false);
 		}
 	}, { threshold: 0 });
 	scrollObserver.observe(emailSentinel);
+	console.log('[inbox scroll] observer armed on sentinel', emailSentinel);
 
 	// Trigger fetch on load
 	fetchFolders();
