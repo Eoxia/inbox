@@ -39,7 +39,8 @@ llxHeader($head, $langs->trans($page_name));
 	<!-- Panel 1: Mailboxes / Folders -->
 	<div class="inbox-panel inbox-sidebar" id="panel-folders">
 		<div class="inbox-panel-header">
-			<button class="btn-new-message">+ Nouveau message</button>
+			<button class="btn-new-message"><i class="fa fa-edit"></i><span class="btn-label"> Nouveau message</span></button>
+			<button class="btn-sidebar-toggle btn-icon" id="btn-sidebar-toggle" title="Réduire la barre latérale"><i class="fa fa-chevron-left"></i></button>
 		</div>
 		<div class="inbox-panel-content">
 			<div class="mailbox-section">

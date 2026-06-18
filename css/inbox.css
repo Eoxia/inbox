@@ -71,6 +71,51 @@
 	width: 250px;
 	flex-shrink: 0;
 	background: #f8fafc;
+	transition: width 0.2s ease;
+	overflow: hidden;
+}
+
+.inbox-sidebar.collapsed {
+	width: 56px;
+}
+
+.inbox-sidebar.collapsed .inbox-panel-header {
+	flex-direction: column;
+	align-items: center;
+	padding: 10px 5px;
+	gap: 6px;
+}
+
+.inbox-sidebar.collapsed .btn-new-message {
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.inbox-sidebar.collapsed .btn-label {
+	display: none;
+}
+
+.inbox-sidebar.collapsed .mailbox-section h3 {
+	display: none;
+}
+
+.inbox-sidebar.collapsed .folder-list li {
+	justify-content: center;
+	padding: 10px 0;
+}
+
+.inbox-sidebar.collapsed .folder-list li i {
+	margin-right: 0;
+	width: auto;
+}
+
+.inbox-sidebar.collapsed .folder-name {
+	display: none;
 }
 
 .btn-new-message {
@@ -87,6 +132,12 @@
 
 .btn-new-message:hover {
 	background-color: #172554;
+}
+
+.btn-sidebar-toggle {
+	flex-shrink: 0;
+	font-size: 13px;
+	color: var(--text-secondary);
 }
 
 .mailbox-section h3 {

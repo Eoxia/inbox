@@ -57,7 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
 					else if (f.type == 'trash') icon = 'fa-trash';
 					else if (f.type == 'archive') icon = 'fa-archive';
 					
-					li.innerHTML = '<i class="fa ' + icon + '"></i> ' + f.name;
+					li.innerHTML = '<i class="fa ' + icon + '"></i><span class="folder-name"> ' + f.name + '</span>';
+					li.title = f.name;
 					li.dataset.id = f.id;
 					
 					if (f.id == currentFolder || (currentFolder == 'INBOX' && f.type == 'inbox')) {
@@ -311,6 +312,33 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	}, { threshold: 0 });
 	scrollObserver.observe(emailSentinel);
+
+	// Sidebar collapse toggle
+	const sidebarEl  = document.getElementById('panel-folders');
+	const toggleBtn  = document.getElementById('btn-sidebar-toggle');
+	const toggleIcon = toggleBtn ? toggleBtn.querySelector('i') : null;
+
+	const setSidebarCollapsed = (collapsed) => {
+		if (collapsed) {
+			sidebarEl.classList.add('collapsed');
+			if (toggleIcon) { toggleIcon.classList.replace('fa-chevron-left', 'fa-chevron-right'); }
+			if (toggleBtn)  toggleBtn.title = 'Agrandir la barre latérale';
+		} else {
+			sidebarEl.classList.remove('collapsed');
+			if (toggleIcon) { toggleIcon.classList.replace('fa-chevron-right', 'fa-chevron-left'); }
+			if (toggleBtn)  toggleBtn.title = 'Réduire la barre latérale';
+		}
+		try { localStorage.setItem('inbox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+	};
+
+	if (toggleBtn) {
+		toggleBtn.addEventListener('click', () => setSidebarCollapsed(!sidebarEl.classList.contains('collapsed')));
+	}
+
+	// Restore state
+	try {
+		if (localStorage.getItem('inbox_sidebar_collapsed') === '1') setSidebarCollapsed(true);
+	} catch (e) {}
 
 	// Trigger fetch on load
 	fetchFolders();
