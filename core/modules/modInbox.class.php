@@ -44,7 +44,7 @@ class modInbox extends DolibarrModules
 		);
 
 		// Config pages.
-		$this->config_page_url = array("setup.php@inbox", "tags.php@inbox");
+		$this->config_page_url = array("setup.php@inbox");
 
 		// Dependencies
 		$this->depends = array();
