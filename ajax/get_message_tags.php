@@ -23,7 +23,7 @@ if (empty($user->rights->inbox->read)) { print json_encode(array('error' => 'Acc
 
 header('Content-Type: application/json');
 
-$message_id = GETPOST('message_id', 'restricthtml');
+$message_id = GETPOST('message_id', 'san');
 if (!$message_id) { print json_encode(array('error' => 'Missing message_id')); exit; }
 
 // Resolve account
@@ -42,9 +42,9 @@ $list = $obj->fetchByMessage($fk_account, $message_id, $conf->entity);
 $data = array();
 foreach ($list as $mt) {
 	$data[] = array(
-		'rowid'        => $mt->fk_tag,
-		'label'        => $mt->tag_label,
-		'color'        => $mt->tag_color,
+		'fk_tag'       => $mt->fk_tag,
+		'tag_label'    => $mt->tag_label,
+		'tag_color'    => $mt->tag_color,
 		'imap_keyword' => $mt->tag_imap_keyword,
 	);
 }
