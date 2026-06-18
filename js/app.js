@@ -6,6 +6,36 @@
 document.addEventListener('DOMContentLoaded', () => {
 	console.log("Inbox module initialized");
 
+	// Parse "Name <email>, ..." into [{name, email}]
+	const parseRecipients = (str) => {
+		if (!str) return [];
+		const parts = [];
+		const re = /(?:[^,<]*<[^>]*>|[^,])+/g;
+		let m;
+		while ((m = re.exec(str)) !== null) {
+			const part = m[0].trim();
+			const angle = part.match(/^(.*?)\s*<([^>]+)>$/);
+			if (angle) {
+				const name = angle[1].trim().replace(/^"|"$/g, '');
+				const email = angle[2].trim();
+				parts.push({ name: name || email, email });
+			} else if (part) {
+				parts.push({ name: part, email: part });
+			}
+		}
+		return parts;
+	};
+
+	const renderRecipients = (str) => {
+		return parseRecipients(str).map(r => {
+			const safeEmail = r.email.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+			const safeName  = r.name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			return r.name !== r.email
+				? `<span title="${safeEmail}" style="cursor:default;border-bottom:1px dotted #94a3b8;">${safeName}</span>`
+				: `<span>${safeEmail}</span>`;
+		}).join(', ');
+	};
+
 	// Simple event listeners for the mockup interactions
 	
 	// 1. Mailbox navigation
@@ -115,15 +145,27 @@ document.addEventListener('DOMContentLoaded', () => {
 			document.getElementById('reply-form-container').style.display = 'none';
 
 			document.querySelector('.email-view-subject').innerText = email.subject;
-			document.querySelector('.sender-name').innerHTML = `${email.from} <a href="#" class="link-erp"><i class="fa fa-user"></i> Contact</a>`;
 			document.querySelector('.email-view-date').innerText = email.date;
+
+			// Sender: show display name with email tooltip
+			const fromParsed = parseRecipients(email.from);
+			const fromHtml = fromParsed.length
+				? fromParsed.map(r => {
+					const safeEmail = r.email.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+					const safeName  = r.name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+					return r.name !== r.email
+						? `<span title="${safeEmail}" style="cursor:default;border-bottom:1px dotted #94a3b8;">${safeName}</span>`
+						: `<span>${safeEmail}</span>`;
+				}).join(', ')
+				: email.from;
+			document.querySelector('.sender-name').innerHTML = fromHtml + ' <a href="#" class="link-erp"><i class="fa fa-user"></i> Contact</a>';
 
 			// Recipients
 			const senderEmailEl = document.querySelector('.sender-email');
 			if (senderEmailEl) {
 				let recipientHtml = '';
-				if (email.to) recipientHtml += '<span style="color:#64748b;">À :</span> ' + email.to;
-				if (email.cc) recipientHtml += '<br><span style="color:#64748b;">Cc :</span> ' + email.cc;
+				if (email.to) recipientHtml += '<span style="color:#64748b;">À :</span> ' + renderRecipients(email.to);
+				if (email.cc) recipientHtml += '<br><span style="color:#64748b;">Cc :</span> ' + renderRecipients(email.cc);
 				senderEmailEl.innerHTML = recipientHtml;
 			}
 
