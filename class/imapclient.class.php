@@ -74,7 +74,7 @@ dol_syslog($conn_string, LOG_NOTICE);
 	 * @param int $limit_days  Max age in days
 	 * @return array|bool      Array of message objects or false on error
 	 */
-	public function getMessages($limit_nb = 500, $limit_days = 180)
+	public function getMessages($limit_nb = 500, $limit_days = 180, $offset = 0, $page_size = 50)
 	{
 		if (!$this->mbox) {
 			$this->error = "Not connected";
@@ -85,56 +85,53 @@ dol_syslog($conn_string, LOG_NOTICE);
 		$emails = imap_search($this->mbox, 'SINCE "'.$date_since.'"');
 
 		if (!$emails) {
-			// No emails found
-			return array();
+			return array('messages' => array(), 'total' => 0, 'has_more' => false);
 		}
 
-		// Sort by newest first
+		// Sort by newest first, then apply account cap
 		rsort($emails);
-
-		// Apply numerical limit
 		$emails = array_slice($emails, 0, $limit_nb);
+		$total = count($emails);
+
+		// Paginate
+		$page_emails = array_slice($emails, $offset, $page_size);
+		$has_more = ($offset + $page_size) < $total;
 
 		$result = array();
 
-		// Fetch overviews
-		$sequence = implode(',', $emails);
-		$overviews = imap_fetch_overview($this->mbox, $sequence, 0);
+		if (!empty($page_emails)) {
+			$sequence = implode(',', $page_emails);
+			$overviews = imap_fetch_overview($this->mbox, $sequence, 0);
 
-		if ($overviews) {
-			foreach ($overviews as $overview) {
-				$item = new stdClass();
-				$item->uid = $overview->uid;
-				$item->msgno = $overview->msgno;
+			if ($overviews) {
+				foreach ($overviews as $overview) {
+					$item = new stdClass();
+					$item->uid = $overview->uid;
+					$item->msgno = $overview->msgno;
 
-				// Decode subject (can be encoded in UTF-8 or ISO-8859-1)
-				$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
-				$item->subject = $this->decodeMimeHeader($subject);
+					$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
+					$item->subject = $this->decodeMimeHeader($subject);
 
-				// Decode sender
-				$from = isset($overview->from) ? $overview->from : '';
-				$item->from = $this->decodeMimeHeader($from);
+					$from = isset($overview->from) ? $overview->from : '';
+					$item->from = $this->decodeMimeHeader($from);
 
-				$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
-				$item->seen = (isset($overview->seen) && $overview->seen) ? 1 : 0;
-				$item->recent = (isset($overview->recent) && $overview->recent) ? 1 : 0;
-				$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
-				$item->deleted = (isset($overview->deleted) && $overview->deleted) ? 1 : 0;
+					$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
+					$item->seen = (isset($overview->seen) && $overview->seen) ? 1 : 0;
+					$item->recent = (isset($overview->recent) && $overview->recent) ? 1 : 0;
+					$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
+					$item->deleted = (isset($overview->deleted) && $overview->deleted) ? 1 : 0;
+					$item->snippet = '';
 
-				// Optional snippet? Could fetch a small body part here, but it's slow.
-				// We'll leave it empty and fetch on demand, or fetch first 100 bytes.
-				$item->snippet = '';
-
-				$result[] = $item;
+					$result[] = $item;
+				}
 			}
+
+			usort($result, function($a, $b) {
+				return $b->msgno - $a->msgno;
+			});
 		}
 
-		// Sort result again by msgno descending since imap_fetch_overview doesn't guarantee order
-		usort($result, function($a, $b) {
-			return $b->msgno - $a->msgno;
-		});
-
-		return $result;
+		return array('messages' => $result, 'total' => $total, 'has_more' => $has_more);
 	}
 
 	/**

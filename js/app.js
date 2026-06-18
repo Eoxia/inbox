@@ -24,6 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
 	let currentEmailBody = '';
 	let currentFolder = 'INBOX';
 
+	// Pagination state
+	let emailPage = 0;
+	const EMAIL_PAGE_SIZE = 50;
+	let emailsLoading = false;
+	let emailsHasMore = false;
+
 	// Fetch folders
 	const fetchFolders = () => {
 		fetch('../../custom/inbox/ajax/get_folders.php')
@@ -82,82 +88,151 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 	};
 
-	// Fetch emails from IMAP via AJAX
-	const fetchEmails = () => {
+	// Build a single email list item element
+	const buildEmailEl = (email) => {
+		const el = document.createElement('div');
+		el.className = 'email-item ' + (email.seen ? '' : 'unread');
+		el.innerHTML = `
+			<div class="email-item-header">
+				<span class="email-sender">${email.from}</span>
+				<span class="email-date">${email.date}</span>
+			</div>
+			<div class="email-subject">${email.subject}</div>
+		`;
+		el.addEventListener('click', (e) => {
+			document.querySelectorAll('.email-item').forEach(em => em.classList.remove('active'));
+			e.currentTarget.classList.add('active');
+			e.currentTarget.classList.remove('unread');
+
+			currentEmail = email;
+
+			document.getElementById('panel-view').style.display = 'flex';
+			document.getElementById('reply-form-container').style.display = 'none';
+
+			document.querySelector('.email-view-subject').innerText = email.subject;
+			document.querySelector('.sender-name').innerHTML = `${email.from} <a href="#" class="link-erp"><i class="fa fa-user"></i> Contact</a>`;
+			document.querySelector('.email-view-date').innerText = email.date;
+
+			const bodyContainer = document.querySelector('.email-view-body');
+			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
+
+			fetch('../../custom/inbox/ajax/get_email_body.php?msgno=' + email.msgno + '&folder=' + encodeURIComponent(currentFolder))
+				.then(res => {
+					if (!res.ok) throw new Error("HTTP error " + res.status);
+					return res.json();
+				})
+				.then(bodyData => {
+					if (bodyData.error) {
+						bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur lors du chargement du corps: ' + bodyData.error + '</div>';
+						currentEmailBody = '';
+					} else {
+						bodyContainer.innerHTML = bodyData.body;
+						currentEmailBody = bodyData.body;
+					}
+				})
+				.catch(err => {
+					console.error("Fetch body error:", err);
+					bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur réseau lors du chargement du corps. (Voir console)</div>';
+				});
+		});
+		return el;
+	};
+
+	// Clear email list keeping the sentinel intact
+	const clearEmailList = () => {
 		const container = document.getElementById('email-list-container');
-		container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement des messages...</div>';
-		
-		fetch('../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder))
+		Array.from(container.children).forEach(child => {
+			if (child.id !== 'email-list-sentinel') child.remove();
+		});
+	};
+
+	// Fetch emails from IMAP via AJAX — reset=true replaces the list, false appends next page
+	const fetchEmails = (reset = true) => {
+		if (emailsLoading) return;
+		emailsLoading = true;
+
+		const container = document.getElementById('email-list-container');
+		const sentinel = document.getElementById('email-list-sentinel');
+
+		if (reset) {
+			emailPage = 0;
+			emailsHasMore = false;
+			clearEmailList();
+			const spinner = document.createElement('div');
+			spinner.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
+			spinner.innerHTML = '<i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement des messages...';
+			container.insertBefore(spinner, sentinel);
+		} else {
+			// Show a subtle loading indicator above the sentinel
+			const loader = document.createElement('div');
+			loader.id = 'email-page-loader';
+			loader.style.cssText = 'padding: 12px; text-align: center; color: #64748b; font-size: 0.9em;';
+			loader.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+			container.insertBefore(loader, sentinel);
+		}
+
+		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
+			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE);
+
+		fetch(url)
 			.then(response => response.json())
 			.then(data => {
+				emailsLoading = false;
+				document.getElementById('email-page-loader')?.remove();
+
 				if (data.error) {
-					container.innerHTML = '<div style="padding: 20px; color: red;">' + data.error + '</div>';
+					if (reset) {
+						clearEmailList();
+						const errDiv = document.createElement('div');
+						errDiv.style.cssText = 'padding: 20px; color: red;';
+						errDiv.textContent = data.error;
+						container.insertBefore(errDiv, sentinel);
+					}
 					return;
 				}
-				
-				container.innerHTML = '';
+
+				if (reset) clearEmailList();
+
 				if (data.data && data.data.length > 0) {
 					data.data.forEach(email => {
-						const el = document.createElement('div');
-						el.className = 'email-item ' + (email.seen ? '' : 'unread');
-						el.innerHTML = `
-							<div class="email-item-header">
-								<span class="email-sender">${email.from}</span>
-								<span class="email-date">${email.date}</span>
-							</div>
-							<div class="email-subject">${email.subject}</div>
-						`;
-						
-						el.addEventListener('click', (e) => {
-							document.querySelectorAll('.email-item').forEach(em => em.classList.remove('active'));
-							e.currentTarget.classList.add('active');
-							e.currentTarget.classList.remove('unread');
-							
-							currentEmail = email; // Store for reply
-							
-							document.getElementById('panel-view').style.display = 'flex';
-							document.getElementById('reply-form-container').style.display = 'none'; // Hide reply form if open
-							
-							// Populate view panel headers
-							document.querySelector('.email-view-subject').innerText = email.subject;
-							document.querySelector('.sender-name').innerHTML = `${email.from} <a href="#" class="link-erp"><i class="fa fa-user"></i> Contact</a>`;
-							document.querySelector('.email-view-date').innerText = email.date;
-							
-							const bodyContainer = document.querySelector('.email-view-body');
-							bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
-							
-							// Fetch body specifically for this email from the current folder
-							fetch('../../custom/inbox/ajax/get_email_body.php?msgno=' + email.msgno + '&folder=' + encodeURIComponent(currentFolder))
-								.then(res => {
-									if (!res.ok) throw new Error("HTTP error " + res.status);
-									return res.json();
-								})
-								.then(bodyData => {
-									if (bodyData.error) {
-										bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur lors du chargement du corps: ' + bodyData.error + '</div>';
-										currentEmailBody = '';
-									} else {
-										bodyContainer.innerHTML = bodyData.body;
-										currentEmailBody = bodyData.body; // Store for blockquote
-									}
-								})
-								.catch(err => {
-									console.error("Fetch body error:", err);
-									bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur réseau lors du chargement du corps. (Voir console)</div>';
-								});
-						});
-						
-						container.appendChild(el);
+						container.insertBefore(buildEmailEl(email), sentinel);
 					});
-				} else {
-					container.innerHTML = '<div style="padding: 20px; text-align: center; color: #64748b;">Aucun email trouvé.</div>';
+				} else if (reset) {
+					const emptyDiv = document.createElement('div');
+					emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
+					emptyDiv.textContent = 'Aucun email trouvé.';
+					container.insertBefore(emptyDiv, sentinel);
 				}
+
+				emailsHasMore = data.has_more;
+				emailPage++;
 			})
 			.catch(err => {
-				container.innerHTML = '<div style="padding: 20px; color: red;">Erreur réseau lors de la synchronisation.</div>';
+				emailsLoading = false;
+				document.getElementById('email-page-loader')?.remove();
+				if (reset) {
+					clearEmailList();
+					const errDiv = document.createElement('div');
+					errDiv.style.cssText = 'padding: 20px; color: red;';
+					errDiv.textContent = 'Erreur réseau lors de la synchronisation.';
+					container.insertBefore(errDiv, sentinel);
+				}
 				console.error(err);
 			});
 	};
+
+	// Add sentinel for infinite scroll at the bottom of the email list
+	const emailSentinel = document.createElement('div');
+	emailSentinel.id = 'email-list-sentinel';
+	emailSentinel.style.height = '10px';
+	document.getElementById('email-list-container').appendChild(emailSentinel);
+
+	const scrollObserver = new IntersectionObserver((entries) => {
+		if (entries[0].isIntersecting && !emailsLoading && emailsHasMore) {
+			fetchEmails(false);
+		}
+	}, { threshold: 0.1 });
+	scrollObserver.observe(emailSentinel);
 
 	// Trigger fetch on load
 	fetchFolders();

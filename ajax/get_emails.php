@@ -70,10 +70,12 @@ if (!$connected) {
 
 $limit_nb = $account->sync_limit_nb ? $account->sync_limit_nb : 500;
 $limit_days = $account->sync_limit_days ? $account->sync_limit_days : 180;
+$offset = max(0, (int) GETPOST('offset', 'int'));
+$page_size = 50;
 
-$messages = $client->getMessages($limit_nb, $limit_days);
+$result = $client->getMessages($limit_nb, $limit_days, $offset, $page_size);
 
-if ($messages === false) {
+if ($result === false) {
 	print json_encode(array('error' => 'Failed to fetch messages: ' . $client->error));
 	$client->close();
 	exit;
@@ -84,8 +86,8 @@ $client->close();
 print json_encode(array(
 	'success' => true,
 	'account' => $account->email,
-	'limit_nb' => $limit_nb,
-	'limit_days' => $limit_days,
-	'count' => count($messages),
-	'data' => $messages
+	'total' => $result['total'],
+	'has_more' => $result['has_more'],
+	'count' => count($result['messages']),
+	'data' => $result['messages']
 ));
