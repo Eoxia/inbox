@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const buildEmailEl = (email) => {
 		const el = document.createElement('div');
 		el.className = 'email-item ' + (email.seen ? '' : 'unread');
+		el.dataset.uid = email.uid;
 		el.innerHTML = `
 			<div class="email-item-header">
 				<span class="email-sender">${email.from}</span>
@@ -294,6 +295,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
 			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE);
 
+		// Remember which email was selected before clearing, so we can restore the highlight
+		const previousUid = currentEmail ? currentEmail.uid : null;
+
 		const resetUI = () => {
 			if (syncIcon) syncIcon.classList.remove('fa-spin');
 			document.getElementById('email-folder-spinner')?.remove();
@@ -337,10 +341,14 @@ document.addEventListener('DOMContentLoaded', () => {
 					if (emailsHasMore) scrollObserver.observe(emailSentinel);
 				}
 
-				// Auto-select first email only on folder switch
 				if (folderSwitch && data.data && data.data.length > 0) {
+					// Folder switch: auto-select first email
 					const firstItem = container.querySelector('.email-item');
 					if (firstItem) firstItem.click();
+				} else if (!folderSwitch && previousUid) {
+					// Same-folder refresh: restore the active highlight without re-opening the email
+					const prevItem = container.querySelector(`.email-item[data-uid="${previousUid}"]`);
+					if (prevItem) prevItem.classList.add('active');
 				}
 			})
 			.catch(err => {
