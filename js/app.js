@@ -120,9 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			const bodyContainer = document.querySelector('.email-view-body');
 			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
 
-			// Clear previous attachment list
+			// Clear previous attachment list and comments
 			const existingAttachBar = document.getElementById('email-attachment-bar');
 			if (existingAttachBar) existingAttachBar.remove();
+			loadComments(email.uid, currentFolder);
 
 			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder))
 				.then(res => {
@@ -525,28 +526,88 @@ document.addEventListener('DOMContentLoaded', () => {
 		});
 	}
 
-	// 3. Comment submission
-	const commentBtn = document.querySelector('.comment-input-area .btn-primary');
+	// ── Comments ────────────────────────────────────────────────────────────
+
+	const commentsList    = document.querySelector('.comments-list');
+	const commentBadge    = document.querySelector('.comments-section .badge');
 	const commentTextarea = document.querySelector('.comment-input-area textarea');
-	
+	const commentBtn      = document.querySelector('.comment-input-area .btn-primary');
+
+	const buildCommentEl = (c) => {
+		const div = document.createElement('div');
+		div.className = 'comment-item';
+		div.dataset.rowid = c.rowid;
+		div.innerHTML = `
+			<div class="comment-avatar">${c.initials}</div>
+			<div class="comment-content">
+				<div class="comment-meta">
+					<span class="comment-author">${c.author}</span>
+					<span class="comment-date">${c.date}</span>
+					${c.is_mine ? '<button class="btn-delete-comment" style="margin-left:8px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:0.8em;" title="Supprimer"><i class="fa fa-times"></i></button>' : ''}
+				</div>
+				<div class="comment-text">${c.comment.replace(/\n/g, '<br>')}</div>
+			</div>
+		`;
+		if (c.is_mine) {
+			div.querySelector('.btn-delete-comment').addEventListener('click', () => {
+				const fd = new URLSearchParams();
+				fd.append('rowid', c.rowid);
+				fetch('../../custom/inbox/ajax/delete_comment.php', { method: 'POST', body: fd })
+					.then(r => r.json())
+					.then(data => {
+						if (data.error) { console.error(data.error); return; }
+						div.remove();
+						const count = commentsList.querySelectorAll('.comment-item').length;
+						if (commentBadge) commentBadge.textContent = count;
+					})
+					.catch(err => console.error(err));
+			});
+		}
+		return div;
+	};
+
+	const loadComments = (uid, folder) => {
+		if (!commentsList) return;
+		commentsList.innerHTML = '<div style="color:#94a3b8;font-size:0.85em;padding:8px 0;">Chargement...</div>';
+		fetch('../../custom/inbox/ajax/get_comments.php?uid=' + encodeURIComponent(uid) + '&folder=' + encodeURIComponent(folder))
+			.then(r => r.json())
+			.then(data => {
+				commentsList.innerHTML = '';
+				if (data.error) { commentsList.innerHTML = '<div style="color:red;">' + data.error + '</div>'; return; }
+				(data.data || []).forEach(c => commentsList.appendChild(buildCommentEl(c)));
+				if (commentBadge) commentBadge.textContent = (data.data || []).length;
+			})
+			.catch(err => { commentsList.innerHTML = ''; console.error(err); });
+	};
+
 	if (commentBtn && commentTextarea) {
 		commentBtn.addEventListener('click', () => {
 			const text = commentTextarea.value.trim();
-			if (text) {
-				// Fake adding comment
-				const commentsList = document.querySelector('.comments-list');
-				const newComment = document.createElement('div');
-				newComment.className = 'comment-item';
-				newComment.innerHTML = `
-					<div class="comment-avatar">Me</div>
-					<div class="comment-content">
-						<div class="comment-meta"><span class="comment-author">Current User</span> <span class="comment-date">Maintenant</span></div>
-						<div class="comment-text">"${text}"</div>
-					</div>
-				`;
-				commentsList.appendChild(newComment);
-				commentTextarea.value = '';
-			}
+			if (!text || !currentEmail) return;
+
+			const fd = new URLSearchParams();
+			fd.append('uid',    currentEmail.uid);
+			fd.append('folder', currentFolder);
+			fd.append('comment', text);
+
+			commentBtn.disabled = true;
+			fetch('../../custom/inbox/ajax/add_comment.php', { method: 'POST', body: fd })
+				.then(r => r.json())
+				.then(data => {
+					commentBtn.disabled = false;
+					if (data.error) { console.error(data.error); return; }
+					commentsList.appendChild(buildCommentEl(data.comment));
+					commentsList.scrollTop = commentsList.scrollHeight;
+					commentTextarea.value = '';
+					const count = commentsList.querySelectorAll('.comment-item').length;
+					if (commentBadge) commentBadge.textContent = count;
+				})
+				.catch(err => { commentBtn.disabled = false; console.error(err); });
+		});
+
+		// Submit on Ctrl+Enter
+		commentTextarea.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) commentBtn.click();
 		});
 	}
 });
