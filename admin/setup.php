@@ -37,6 +37,7 @@ if (!$res) {
 	die("Include of main fails");
 }
 
+require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 dol_include_once('/inbox/class/inboxaccount.class.php');
 dol_include_once('/inbox/lib/inbox.lib.php');
 
