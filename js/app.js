@@ -267,13 +267,19 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (reset) {
 			emailPage = 0;
 			emailsHasMore = false;
-			clearEmailList();
-			const spinner = document.createElement('div');
-			spinner.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
-			spinner.innerHTML = '<i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement des messages...';
-			container.insertBefore(spinner, sentinel);
+			// Keep existing items visible while loading — just dim them and show a top bar
+			container.style.opacity = '0.5';
+			container.style.pointerEvents = 'none';
+			let bar = document.getElementById('email-refresh-bar');
+			if (!bar) {
+				bar = document.createElement('div');
+				bar.id = 'email-refresh-bar';
+				bar.style.cssText = 'padding: 6px 15px; font-size: 0.82em; color: #64748b; border-bottom: 1px solid #e2e8f0; background: #f8fafc; display:flex; align-items:center; gap:6px;';
+				container.parentElement.insertBefore(bar, container);
+			}
+			bar.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Actualisation...';
 		} else {
-			// Show a subtle loading indicator above the sentinel
+			// Append mode: small loader above sentinel
 			const loader = document.createElement('div');
 			loader.id = 'email-page-loader';
 			loader.style.cssText = 'padding: 12px; text-align: center; color: #64748b; font-size: 0.9em;';
@@ -284,11 +290,18 @@ document.addEventListener('DOMContentLoaded', () => {
 		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
 			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE);
 
+		const resetUI = () => {
+			container.style.opacity = '';
+			container.style.pointerEvents = '';
+			document.getElementById('email-refresh-bar')?.remove();
+			document.getElementById('email-page-loader')?.remove();
+		};
+
 		fetch(url)
 			.then(response => response.json())
 			.then(data => {
 				emailsLoading = false;
-				document.getElementById('email-page-loader')?.remove();
+				resetUI();
 
 				if (data.error) {
 					if (reset) {
@@ -330,7 +343,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			})
 			.catch(err => {
 				emailsLoading = false;
-				document.getElementById('email-page-loader')?.remove();
+				resetUI();
 				if (reset) {
 					clearEmailList();
 					const errDiv = document.createElement('div');
