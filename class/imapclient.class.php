@@ -110,10 +110,11 @@ class IMAPClient
 
 			$results = $this->client->search($this->mailbox, $query, [
 				'results' => [Horde_Imap_Client::SEARCH_RESULTS_MATCH],
-				'sort'    => [Horde_Imap_Client::SORT_REVERSE, Horde_Imap_Client::SORT_DATE],
 			]);
 
 			$allIds = $results['match']->ids;
+			// Higher UID = newer message — rsort gives newest-first without a server SORT round-trip
+			rsort($allIds);
 			if (count($allIds) > $limit_nb) {
 				$allIds = array_slice($allIds, 0, $limit_nb);
 			}
@@ -280,7 +281,7 @@ class IMAPClient
 	 * @param int    $encoding Ignored (kept for BC)
 	 * @return string          Decoded binary data, or empty string on failure
 	 */
-	public function getAttachmentData($uid, $partno, $encoding)
+	public function getAttachmentData($uid, $partno, $_encoding)
 	{
 		if (!$this->client) return '';
 
@@ -472,7 +473,7 @@ class IMAPClient
 				'add' => [$keyword],
 			]);
 			return true;
-		} catch (Horde_Imap_Client_Exception $e) {
+		} catch (Horde_Imap_Client_Exception) {
 			return false;
 		}
 	}
@@ -494,7 +495,7 @@ class IMAPClient
 				'remove' => [$keyword],
 			]);
 			return true;
-		} catch (Horde_Imap_Client_Exception $e) {
+		} catch (Horde_Imap_Client_Exception) {
 			return false;
 		}
 	}
@@ -584,7 +585,7 @@ class IMAPClient
 				return ['full_resync' => true, 'token' => $this->getSyncToken()];
 			}
 			return null;
-		} catch (Horde_Imap_Client_Exception $e) {
+		} catch (Horde_Imap_Client_Exception) {
 			return null;
 		}
 	}
