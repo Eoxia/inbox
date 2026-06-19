@@ -136,28 +136,29 @@ class IMAPClient
 				'ids' => new Horde_Imap_Client_Ids($pageIds),
 			]);
 
-			$messages     = [];
-			$systemFlags  = ['\Seen', '\Answered', '\Deleted', '\Flagged', '\Draft', '\Recent'];
+			$messages    = [];
+			$systemFlags = ['\\seen', '\\answered', '\\deleted', '\\flagged', '\\draft', '\\recent'];
 
 			foreach ($fetchResult as $data) {
-				$envelope = $data->getEnvelope();
-				$flags    = $data->getFlags();
-				$uid      = $data->getUid();
+				$envelope   = $data->getEnvelope();
+				$uid        = $data->getUid();
+				// Horde normalises flags to lowercase (e.g. '\seen', not '\Seen')
+				$flags      = array_map('strtolower', $data->getFlags());
 
 				$item             = new stdClass();
 				$item->uid        = $uid;
 				$item->message_id = $envelope->message_id ? trim($envelope->message_id) : '';
 				$item->subject    = $envelope->subject ?: '(No Subject)';
 				$item->date       = $envelope->date ? $envelope->date->format('Y-m-d H:i:s') : '';
-				$item->seen       = in_array('\Seen',     $flags) ? 1 : 0;
-				$item->answered   = in_array('\Answered', $flags) ? 1 : 0;
+				$item->seen       = in_array('\\seen',     $flags) ? 1 : 0;
+				$item->answered   = in_array('\\answered', $flags) ? 1 : 0;
 				$item->deleted    = 0;
 
 				$item->from = $this->formatAddress($envelope->from);
 				$item->to   = $this->formatAddress($envelope->to);
 				$item->cc   = $this->formatAddress($envelope->cc);
 
-				$keywords      = array_diff($flags, $systemFlags);
+				$keywords       = array_diff($flags, $systemFlags);
 				$item->keywords = implode(' ', $keywords);
 
 				$messages[] = $item;
