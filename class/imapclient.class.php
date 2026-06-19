@@ -2,540 +2,455 @@
 /**
  *	\file       class/imapclient.class.php
  *	\ingroup    inbox
- *	\brief      Thin wrapper around the PHP IMAP extension for the Inbox module
+ *	\brief      IMAP client using Horde_Imap_Client_Socket (bytestream/horde-imap-client).
+ *              Supports QRESYNC/CONDSTORE via getSyncToken() + getDelta().
  */
 
 /**
- * Handles IMAP connections and all mailbox operations: listing folders,
- * fetching message headers/bodies/attachments, moving and deleting messages.
+ * Handles IMAP connections and mailbox operations.
  *
- * All message references use IMAP UIDs (not sequence numbers) so that
- * imap_expunge() calls never invalidate open references.
+ * Replaces the previous ext/imap wrapper with Horde_Imap_Client_Socket,
+ * which communicates directly over a socket (no PHP IMAP extension required)
+ * and supports CONDSTORE/QRESYNC for efficient delta synchronisation.
+ *
+ * Public API is backward-compatible with the previous IMAPClient class.
+ * Two new methods are added for QRESYNC:
+ *   getSyncToken()  — returns an opaque token representing the current state
+ *   getDelta($token, $knownUids)  — returns changes since the token was issued
  */
 class IMAPClient
 {
-	/** @var resource|false  Active IMAP stream returned by imap_open() */
-	private $mbox;
+	/** @var Horde_Imap_Client_Socket|null  Active IMAP session */
+	private $client = null;
 
-	/** @var string  Last error message set by any method */
-	public $error;
+	/** @var Horde_Imap_Client_Mailbox  Currently selected mailbox */
+	private $mailbox;
 
-	/** @var string[]  Accumulated error strings (not currently used externally) */
-	public $errors = array();
+	/** @var string  Last error message */
+	public $error = '';
 
-	/** @var string  Connection string without folder suffix, e.g. "{mail.example.com:993/imap/ssl}" */
+	/** @var string[]  Accumulated errors (kept for backward compatibility) */
+	public $errors = [];
+
+	/** @var string  Kept for backward compatibility — unused with Horde */
 	public $conn_string_base = '';
 
 	/**
-	 * Open an IMAP stream to the given server and folder.
+	 * Open an IMAP session.
 	 *
-	 * @param string $host      IMAP server hostname or IP
+	 * @param string $host      IMAP hostname or IP
 	 * @param int    $port      IMAP port (143, 993, …)
-	 * @param string $security  Transport security: 'ssl', 'starttls'/'tls', or 'none'
-	 * @param string $login     Account username
-	 * @param string $password  Account password
-	 * @param string $folder    Mailbox folder to open (default: 'INBOX')
-	 * @return bool             True on success, false on failure ($this->error is set)
+	 * @param string $security  'ssl', 'starttls'/'tls', or 'none'
+	 * @param string $login     Username
+	 * @param string $password  Password
+	 * @param string $folder    Mailbox to select (default: 'INBOX')
+	 * @return bool             True on success
 	 */
 	public function connect($host, $port, $security, $login, $password, $folder = 'INBOX')
 	{
-		if (!function_exists('imap_open')) {
-			$this->error = "PHP IMAP extension is not installed";
+		$autoload = __DIR__.'/../vendor/autoload.php';
+		if (!file_exists($autoload)) {
+			$this->error = 'Horde autoloader not found — run composer install in the inbox module directory';
 			return false;
 		}
+		require_once $autoload;
 
-		$conn_string = "{" . $host . ":" . $port . "/imap";
-
-		if ($security == 'ssl') {
-			$conn_string .= "/ssl";
-		} elseif ($security == 'starttls' || $security == 'tls') {
-			$conn_string .= "/tls";
+		$secure = false;
+		if ($security === 'ssl') {
+			$secure = 'ssl';
+		} elseif ($security === 'starttls' || $security === 'tls') {
+			$secure = 'tls';
 		}
 
-		// Add /novalidate-cert for typical dev environments, though not ideal for strict prod
-		// $conn_string .= "/novalidate-cert";
-		$conn_string .= "}";
-		$this->conn_string_base = $conn_string;
-
-		if (strtoupper($folder) != 'INBOX') {
-			$folder = imap_utf7_encode($folder);
-		}
-
-		$conn_string .= $folder;
-
-		imap_errors();
-
-		$this->mbox = @imap_open($conn_string, $login, $password);
-
-		if (!$this->mbox) {
-			$errors = imap_errors();
-			$this->error = "Failed to connect to IMAP server. " . ($errors ? implode(', ', $errors) : "Unknown error");
+		try {
+			$this->client = new Horde_Imap_Client_Socket([
+				'hostspec' => $host,
+				'port'     => (int) $port,
+				'secure'   => $secure,
+				'username' => $login,
+				'password' => $password,
+			]);
+			$this->client->login();
+			$this->mailbox = new Horde_Imap_Client_Mailbox($folder);
+			$this->client->openMailbox($this->mailbox);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			$this->client = null;
 			return false;
 		}
-
-		return true;
 	}
 
 	/**
-	 * Return a paginated list of message headers from the current folder.
+	 * Return a paginated list of message headers from the selected folder.
 	 *
-	 * Uses SE_UID / FT_UID throughout so UIDs are stable across expunge operations.
-	 * Messages are sorted newest-first by UID before pagination is applied.
+	 * Messages are sorted newest-first. Deleted messages (\Deleted) are excluded.
 	 *
-	 * @param int $limit_nb    Maximum total messages to consider (pool size)
-	 * @param int $limit_days  Only consider messages newer than this many days
-	 * @param int $offset      Zero-based index of the first message to return
+	 * @param int $limit_nb    Maximum number of messages to consider (pool size)
+	 * @param int $limit_days  Only include messages newer than this many days
+	 * @param int $offset      Zero-based offset for pagination
 	 * @param int $page_size   Number of messages per page
 	 * @return array|false     ['messages' => stdClass[], 'total' => int, 'has_more' => bool]
-	 *                         or false if not connected.
-	 *                         Each message object has: uid, message_id, subject, from, to, cc,
-	 *                         date, seen, answered, deleted.
+	 *                         Each message: uid, message_id, subject, from, to, cc,
+	 *                         date, seen, answered, deleted, keywords
 	 */
 	public function getMessages($limit_nb = 500, $limit_days = 180, $offset = 0, $page_size = 50)
 	{
-		if (!$this->mbox) {
-			$this->error = "Not connected";
+		if (!$this->client) {
+			$this->error = 'Not connected';
 			return false;
 		}
 
-		$date_since = date("d-M-Y", strtotime("-".$limit_days." days"));
-		// SE_UID: return UIDs instead of sequence numbers — UIDs never change after expunge
-		$emails = imap_search($this->mbox, 'SINCE "'.$date_since.'"', SE_UID);
+		try {
+			$since = new DateTime('-'.$limit_days.' days');
 
-		if (!$emails) {
-			return array('messages' => array(), 'total' => 0, 'has_more' => false);
-		}
+			$query = new Horde_Imap_Client_Search_Query();
+			$query->dateSearch($since, Horde_Imap_Client_Search_Query::DATE_SINCE);
+			$query->flag('\Deleted', false);
 
-		rsort($emails);
-		$total = count($emails);
+			$results = $this->client->search($this->mailbox, $query, [
+				'results' => [Horde_Imap_Client::SEARCH_RESULTS_MATCH],
+				'sort'    => [Horde_Imap_Client::SORT_REVERSE, Horde_Imap_Client::SORT_DATE],
+			]);
 
-		$page_emails = array_slice($emails, $offset, $page_size);
-		$has_more = ($offset + $page_size) < $total;
-
-		$result = array();
-
-		if (!empty($page_emails)) {
-			$sequence = implode(',', $page_emails);
-			// FT_UID: sequence is UIDs
-			$overviews = imap_fetch_overview($this->mbox, $sequence, FT_UID);
-
-			if ($overviews) {
-				foreach ($overviews as $overview) {
-					$item = new stdClass();
-					$item->uid        = $overview->uid;
-					$item->message_id = isset($overview->message_id) ? trim($overview->message_id) : '';
-
-					$subject = isset($overview->subject) ? $overview->subject : '(No Subject)';
-					$item->subject = $this->decodeMimeHeader($subject);
-
-					$from = isset($overview->from) ? $overview->from : '';
-					$item->from = $this->decodeMimeHeader($from);
-
-					$to = isset($overview->to) ? $overview->to : '';
-					$item->to = $this->decodeMimeHeader($to);
-
-					$cc = isset($overview->cc) ? $overview->cc : '';
-					$item->cc = $this->decodeMimeHeader($cc);
-
-					$item->date = isset($overview->date) ? date("Y-m-d H:i:s", strtotime($overview->date)) : '';
-					$item->seen     = (isset($overview->seen)     && $overview->seen)     ? 1 : 0;
-					$item->answered = (isset($overview->answered) && $overview->answered) ? 1 : 0;
-					$item->deleted  = (isset($overview->deleted)  && $overview->deleted)  ? 1 : 0;
-
-					// User-defined IMAP keywords (space-separated), e.g. "Urgent Projet"
-					$item->keywords = isset($overview->keywords) ? trim($overview->keywords) : '';
-
-					$result[] = $item;
-				}
+			$allIds = $results['match']->ids;
+			if (count($allIds) > $limit_nb) {
+				$allIds = array_slice($allIds, 0, $limit_nb);
 			}
 
-			// Higher UID = newer message
-			usort($result, function ($a, $b) { return $b->uid - $a->uid; });
-		}
+			$total    = count($allIds);
+			$has_more = ($offset + $page_size) < $total;
+			$pageIds  = array_slice($allIds, $offset, $page_size);
 
-		return array('messages' => $result, 'total' => $total, 'has_more' => $has_more);
-	}
-
-	/**
-	 * Decode an encoded MIME header value (e.g. =?UTF-8?B?...?=) to a UTF-8 string.
-	 *
-	 * @param string $string  Raw header value
-	 * @return string         UTF-8 decoded string
-	 */
-	private function decodeMimeHeader($string)
-	{
-		$decoded = '';
-		$elements = imap_mime_header_decode($string);
-		if (is_array($elements)) {
-			foreach ($elements as $element) {
-				$charset = $element->charset;
-				$text = $element->text;
-				if ($charset != 'default' && strtolower($charset) != 'utf-8' && strtolower($charset) != 'us-ascii') {
-					$text = mb_convert_encoding($text, 'UTF-8', $charset);
-				}
-				$decoded .= $text;
+			if (empty($pageIds)) {
+				return ['messages' => [], 'total' => $total, 'has_more' => $has_more];
 			}
-		} else {
-			$decoded = $string;
-		}
-		return $decoded;
-	}
 
-	/**
-	 * Return the list of attachments for a message.
-	 *
-	 * Walks the MIME tree recursively. Inline text/plain and text/html parts
-	 * are excluded even when they carry a filename.
-	 *
-	 * @param int $uid  Message UID
-	 * @return array    Each element: ['partno' => string, 'filename' => string,
-	 *                  'mime' => string, 'size' => int, 'encoding' => int]
-	 */
-	public function getAttachments($uid)
-	{
-		if (!$this->mbox) return array();
-		$structure = @imap_fetchstructure($this->mbox, $uid, FT_UID);
-		$attachments = array();
-		$this->findAttachments($structure, $attachments, '');
-		return $attachments;
-	}
+			$fetchQuery = new Horde_Imap_Client_Fetch_Query();
+			$fetchQuery->envelope();
+			$fetchQuery->flags();
+			$fetchQuery->uid();
 
-	/**
-	 * Recursive MIME-tree walker that collects attachment descriptors.
-	 *
-	 * @param object $structure   imap_fetchstructure() part object
-	 * @param array  &$attachments Accumulator array (passed by reference)
-	 * @param string $partno      Dotted MIME part number, e.g. "1.2" (empty for root)
-	 * @return void
-	 */
-	private function findAttachments($structure, &$attachments, $partno)
-	{
-		if (!$structure) return;
+			$fetchResult = $this->client->fetch($this->mailbox, $fetchQuery, [
+				'ids' => new Horde_Imap_Client_Ids($pageIds),
+			]);
 
-		if ($structure->type == 1) { // MULTIPART
-			foreach ($structure->parts as $index => $subStruct) {
-				$sub = $partno ? $partno.'.'.($index + 1) : (string)($index + 1);
-				$this->findAttachments($subStruct, $attachments, $sub);
+			$messages     = [];
+			$systemFlags  = ['\Seen', '\Answered', '\Deleted', '\Flagged', '\Draft', '\Recent'];
+
+			foreach ($fetchResult as $data) {
+				$envelope = $data->getEnvelope();
+				$flags    = $data->getFlags();
+				$uid      = $data->getUid();
+
+				$item             = new stdClass();
+				$item->uid        = $uid;
+				$item->message_id = $envelope->message_id ? trim($envelope->message_id) : '';
+				$item->subject    = $envelope->subject ?: '(No Subject)';
+				$item->date       = $envelope->date ? $envelope->date->format('Y-m-d H:i:s') : '';
+				$item->seen       = in_array('\Seen',     $flags) ? 1 : 0;
+				$item->answered   = in_array('\Answered', $flags) ? 1 : 0;
+				$item->deleted    = 0;
+
+				$item->from = $this->formatAddress($envelope->from);
+				$item->to   = $this->formatAddress($envelope->to);
+				$item->cc   = $this->formatAddress($envelope->cc);
+
+				$keywords      = array_diff($flags, $systemFlags);
+				$item->keywords = implode(' ', $keywords);
+
+				$messages[] = $item;
 			}
-			return;
+
+			usort($messages, static function ($a, $b) { return $b->uid - $a->uid; });
+
+			return ['messages' => $messages, 'total' => $total, 'has_more' => $has_more];
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
 		}
-
-		$filename = '';
-		if (!empty($structure->dparameters)) {
-			foreach ($structure->dparameters as $p) {
-				if (strtolower($p->attribute) == 'filename') {
-					$filename = $this->decodeMimeHeader($p->value);
-					break;
-				}
-			}
-		}
-		if (empty($filename) && !empty($structure->parameters)) {
-			foreach ($structure->parameters as $p) {
-				if (strtolower($p->attribute) == 'name') {
-					$filename = $this->decodeMimeHeader($p->value);
-					break;
-				}
-			}
-		}
-
-		if (empty($filename)) return;
-
-		$disposition = isset($structure->disposition) ? strtolower($structure->disposition) : '';
-		if ($disposition === 'inline' && $structure->type === 0
-			&& in_array(strtolower($structure->subtype), array('html', 'plain'))) {
-			return;
-		}
-
-		$attachments[] = array(
-			'partno'   => $partno ?: '1',
-			'filename' => $filename,
-			'mime'     => $this->getMimeType($structure),
-			'size'     => isset($structure->bytes) ? (int)$structure->bytes : 0,
-			'encoding' => isset($structure->encoding) ? (int)$structure->encoding : 0,
-		);
-	}
-
-	/**
-	 * Fetch and decode the raw bytes of a single MIME part (for attachment download).
-	 *
-	 * @param int    $uid       Message UID
-	 * @param string $partno    Dotted MIME part number, e.g. "2" or "1.2"
-	 * @param int    $encoding  IMAP encoding constant (3 = BASE64, 4 = QUOTED-PRINTABLE)
-	 * @return string           Decoded binary data, or empty string on failure
-	 */
-	public function getAttachmentData($uid, $partno, $encoding)
-	{
-		if (!$this->mbox) return '';
-		$raw = @imap_fetchbody($this->mbox, $uid, $partno, FT_UID);
-		if ($encoding == 3) return base64_decode($raw);
-		if ($encoding == 4) return quoted_printable_decode($raw);
-		return $raw;
 	}
 
 	/**
 	 * Return the decoded body of a message, preferring HTML over plain text.
 	 *
-	 * Falls back to imap_body() if the MIME structure yields nothing.
-	 * Plain-text bodies are converted to HTML via nl2br + htmlspecialchars.
-	 *
 	 * @param int $uid  Message UID
-	 * @return string   HTML or plain-text body, empty string on failure
+	 * @return string   HTML body or plain text converted to HTML; empty on failure
 	 */
 	public function getMessageBody($uid)
 	{
-		if (!$this->mbox) return '';
+		if (!$this->client) return '';
 
-		$structure = @imap_fetchstructure($this->mbox, $uid, FT_UID);
-		$body = $this->getPart($this->mbox, $uid, "TEXT/HTML", $structure);
+		try {
+			$structure = $this->fetchStructure($uid);
+			if (!$structure) return '';
 
-		if (empty($body)) {
-			$body = $this->getPart($this->mbox, $uid, "TEXT/PLAIN", $structure);
-			if ($body) {
-				$body = nl2br(htmlspecialchars($body));
+			$htmlId  = $structure->findBody('html');
+			$plainId = $structure->findBody('plain');
+			$bodyId  = $htmlId ?: $plainId;
+
+			if (!$bodyId) return '';
+
+			$fq = new Horde_Imap_Client_Fetch_Query();
+			$fq->bodyPart($bodyId, ['decode' => true, 'peek' => true]);
+
+			$res = $this->client->fetch($this->mailbox, $fq, [
+				'ids' => new Horde_Imap_Client_Ids([$uid]),
+			]);
+			if (!count($res)) return '';
+
+			$content = (string) $res->first()->getBodyPart($bodyId);
+
+			$part    = $structure->getPart($bodyId);
+			$charset = $part ? $part->getCharset() : 'UTF-8';
+			if ($charset && strtolower($charset) !== 'utf-8') {
+				$content = (string) @mb_convert_encoding($content, 'UTF-8', $charset);
 			}
-		}
 
-		if (empty($body)) {
-			$body = @imap_body($this->mbox, $uid, FT_UID);
-		}
+			if (!$htmlId && $plainId) {
+				$content = nl2br(htmlspecialchars($content, ENT_QUOTES, 'UTF-8'));
+			}
 
-		return $body;
+			return $content;
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return '';
+		}
 	}
 
 	/**
-	 * Recursively search the MIME tree for a part matching $mimeType.
+	 * Return attachment descriptors for a message.
 	 *
-	 * For multipart/alternative containers the first matching subpart is returned.
-	 * For other multipart types the tree is traversed depth-first.
-	 *
-	 * @param resource $mbox        Active IMAP stream
-	 * @param int      $uid         Message UID
-	 * @param string   $mimeType    MIME type to find, e.g. "TEXT/HTML"
-	 * @param object   $structure   imap_fetchstructure() part object
-	 * @param string   $partNumber  Current dotted part number (empty at root)
-	 * @return string|false         Decoded content or false if not found
+	 * @param int $uid  Message UID
+	 * @return array    Each element: ['partno', 'filename', 'mime', 'size', 'encoding']
+	 *                  'encoding' is always 0 — Horde handles decoding transparently
 	 */
-	private function getPart($mbox, $uid, $mimeType, $structure, $partNumber = false)
+	public function getAttachments($uid)
 	{
-		if (!$structure) return false;
+		if (!$this->client) return [];
 
-		$prefix = ($partNumber ? $partNumber."." : "");
+		try {
+			$structure = $this->fetchStructure($uid);
+			if (!$structure) return [];
 
-		if ($structure->type == 1) { // MULTIPART
-			foreach ($structure->parts as $index => $subStruct) {
-				$partNum = $prefix.($index + 1);
-				if ($structure->subtype == "ALTERNATIVE") {
-					$mime = $this->getMimeType($subStruct);
-					if (strtoupper($mime) == strtoupper($mimeType)) {
-						return $this->decodeBody(@imap_fetchbody($mbox, $uid, $partNum, FT_UID), $subStruct->encoding, $subStruct->parameters);
-					}
+			$attachments = [];
+			$map = $structure->contentTypeMap();
+
+			foreach ($map as $mimeId => $contentType) {
+				if ($mimeId === '0') continue;
+				$part = $structure->getPart($mimeId);
+				if (!$part) continue;
+
+				$filename    = $part->getName(true);
+				if (!$filename) continue;
+
+				$disposition = strtolower((string) $part->getDisposition());
+				if ($disposition === 'inline'
+					&& in_array($contentType, ['text/plain', 'text/html'])) {
+					continue;
 				}
-				$data = $this->getPart($mbox, $uid, $mimeType, $subStruct, $partNum);
-				if ($data) return $data;
+
+				$attachments[] = [
+					'partno'   => (string) $mimeId,
+					'filename' => $filename,
+					'mime'     => $contentType,
+					'size'     => (int) $part->getBytes(),
+					'encoding' => 0,
+				];
 			}
-		} else {
-			$mime = $this->getMimeType($structure);
-			if (strtoupper($mime) == strtoupper($mimeType)) {
-				$partNum = $partNumber ? $partNumber : "1";
-				return $this->decodeBody(@imap_fetchbody($mbox, $uid, $partNum, FT_UID), $structure->encoding, $structure->parameters);
-			}
+
+			return $attachments;
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return [];
 		}
-		return false;
 	}
 
 	/**
-	 * Build a "TYPE/SUBTYPE" MIME string from an imap_fetchstructure() part object.
+	 * Fetch and return the decoded bytes of a single MIME part.
 	 *
-	 * @param object $structure  imap_fetchstructure() part object
-	 * @return string            e.g. "TEXT/HTML", "APPLICATION/PDF"
+	 * The $encoding parameter is kept for backward compatibility but is ignored —
+	 * Horde decodes the transfer encoding (base64/qp) automatically.
+	 *
+	 * @param int    $uid      Message UID
+	 * @param string $partno   Dotted MIME part number, e.g. "2" or "1.2"
+	 * @param int    $encoding Ignored (kept for BC)
+	 * @return string          Decoded binary data, or empty string on failure
 	 */
-	private function getMimeType($structure)
+	public function getAttachmentData($uid, $partno, $encoding)
 	{
-		$primary = array("TEXT", "MULTIPART", "MESSAGE", "APPLICATION", "AUDIO", "IMAGE", "VIDEO", "OTHER");
-		if ($structure->type && isset($primary[$structure->type])) {
-			return $primary[$structure->type] . "/" . $structure->subtype;
+		if (!$this->client) return '';
+
+		try {
+			$fq = new Horde_Imap_Client_Fetch_Query();
+			$fq->bodyPart($partno, ['decode' => true, 'peek' => true]);
+
+			$res = $this->client->fetch($this->mailbox, $fq, [
+				'ids' => new Horde_Imap_Client_Ids([$uid]),
+			]);
+			if (!count($res)) return '';
+
+			return (string) $res->first()->getBodyPart($partno);
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return '';
 		}
-		return "TEXT/PLAIN";
 	}
 
 	/**
-	 * Decode a raw MIME part body and convert it to UTF-8.
+	 * Return all folders for the current account, sorted by conventional order.
 	 *
-	 * @param string      $body        Raw bytes from imap_fetchbody()
-	 * @param int         $encoding    IMAP encoding constant (3=BASE64, 4=QUOTED-PRINTABLE)
-	 * @param object[]|null $parameters MIME parameters array (used to read charset)
-	 * @return string                  UTF-8 decoded body
-	 */
-	private function decodeBody($body, $encoding, $parameters)
-	{
-		if ($encoding == 4) {
-			$body = quoted_printable_decode($body);
-		} elseif ($encoding == 3) {
-			$body = base64_decode($body);
-		}
-
-		$charset = 'UTF-8';
-		if ($parameters) {
-			foreach ($parameters as $p) {
-				if (strtolower($p->attribute) == 'charset') {
-					$charset = $p->value;
-					break;
-				}
-			}
-		}
-
-		if (strtolower($charset) != 'utf-8') {
-			$body = @mb_convert_encoding($body, 'UTF-8', $charset);
-		}
-
-		return $body;
-	}
-
-	/**
-	 * Return all folders/mailboxes for the current account, sorted by conventional order
-	 * (Inbox → Sent → Drafts → Archive → Spam → Trash → other folders alphabetically).
+	 * Uses SPECIAL-USE attributes (RFC 6154) when available, falls back to
+	 * name heuristics. Folder names are already UTF-8 decoded by Horde.
 	 *
-	 * Folder names are decoded from IMAP modified UTF-7 to UTF-8 and translated
-	 * to French for standard mailbox names (Inbox, Sent, Drafts, Trash, Spam, Archive).
-	 *
-	 * @return array  Each element: ['id' => string (raw IMAP name),
-	 *                'name' => string (display name, UTF-8),
-	 *                'type' => string (inbox|sent|drafts|trash|spam|archive|folder)]
+	 * @return array  Each element: ['id' => string, 'name' => string, 'type' => string]
 	 */
 	public function getFolders()
 	{
-		if (!$this->mbox) return array();
+		if (!$this->client) return [];
 
-		$mailboxes = imap_getmailboxes($this->mbox, $this->conn_string_base, "*");
-		$folders = array();
+		try {
+			$list = $this->client->listMailboxes('*', Horde_Imap_Client::MBOX_ALL, [
+				'attributes'  => true,
+				'special_use' => true,
+			]);
 
-		if (is_array($mailboxes)) {
-			foreach ($mailboxes as $mailbox) {
-				$name = str_replace($this->conn_string_base, '', $mailbox->name);
-				// imap_utf7_decode can return invalid UTF-8 on certain PHP/c-client versions.
-				// Convert IMAP modified UTF-7 (&...-) to standard UTF-7 (+...-) then use mb_convert_encoding.
-				$utf7std = preg_replace_callback('/&([^-]*)-/', function ($m) {
-					return $m[1] === '' ? '&' : '+' . $m[1] . '-';
-				}, $name);
-				$cleanName = @mb_convert_encoding($utf7std, 'UTF-8', 'UTF-7');
-				if ($cleanName === false || !mb_check_encoding($cleanName, 'UTF-8')) {
-					$cleanName = mb_scrub($name);
+			$folders = [];
+			foreach ($list as $name => $data) {
+				$attrs = isset($data['attributes']) ? $data['attributes'] : [];
+				if (in_array('\Noselect', $attrs) || in_array('\NonExistent', $attrs)) {
+					continue;
 				}
 
-				$type = 'folder';
-				$lower = strtolower($cleanName);
-				if ($lower == 'inbox') $type = 'inbox';
-				elseif (strpos($lower, 'sent') !== false || strpos($lower, 'envoy') !== false) $type = 'sent';
-				elseif (strpos($lower, 'draft') !== false || strpos($lower, 'brouillon') !== false) $type = 'drafts';
-				elseif (strpos($lower, 'trash') !== false || strpos($lower, 'corbeille') !== false) $type = 'trash';
-				elseif (strpos($lower, 'spam') !== false || strpos($lower, 'junk') !== false || strpos($lower, 'pourriel') !== false) $type = 'spam';
-				elseif (strpos($lower, 'archive') !== false) $type = 'archive';
-
-				if (stripos($cleanName, 'INBOX.') === 0) {
-					$cleanName = substr($cleanName, 6);
+				$name        = (string) $name;
+				$displayName = $name;
+				if (stripos($displayName, 'INBOX.') === 0) {
+					$displayName = substr($displayName, 6);
 				}
 
-				if ($type == 'inbox' && strtolower($cleanName) == 'inbox') $cleanName = 'Boîte de réception';
-				elseif ($type == 'sent' && strtolower($cleanName) == 'sent') $cleanName = 'Envoyés';
-				elseif ($type == 'drafts' && strtolower($cleanName) == 'drafts') $cleanName = 'Brouillons';
-				elseif ($type == 'trash' && strtolower($cleanName) == 'trash') $cleanName = 'Corbeille';
-				elseif ($type == 'spam' && (strtolower($cleanName) == 'spam' || strtolower($cleanName) == 'junk')) $cleanName = 'Pourriel';
-				elseif ($type == 'archive' && strtolower($cleanName) == 'archive') $cleanName = 'Archivé';
+				$type       = 'folder';
+				$specialUse = isset($data['special_use']) ? $data['special_use'] : [];
 
-				$folders[] = array(
-					'id' => $name,
-					'name' => $cleanName,
-					'type' => $type
-				);
+				foreach ($specialUse as $use) {
+					switch (strtolower($use)) {
+						case '\sent':    $type = 'sent';    break;
+						case '\drafts':  $type = 'drafts';  break;
+						case '\trash':   $type = 'trash';   break;
+						case '\junk':    $type = 'spam';    break;
+						case '\archive': $type = 'archive'; break;
+					}
+				}
+
+				if ($type === 'folder') {
+					$lower = strtolower($name);
+					if ($lower === 'inbox')                                                       $type = 'inbox';
+					elseif (strpos($lower, 'sent')     !== false || strpos($lower, 'envoy')     !== false) $type = 'sent';
+					elseif (strpos($lower, 'draft')    !== false || strpos($lower, 'brouillon') !== false) $type = 'drafts';
+					elseif (strpos($lower, 'trash')    !== false || strpos($lower, 'corbeille') !== false) $type = 'trash';
+					elseif (strpos($lower, 'spam')     !== false || strpos($lower, 'junk')      !== false
+					      || strpos($lower, 'pourriel') !== false)                                $type = 'spam';
+					elseif (strpos($lower, 'archive')  !== false)                                $type = 'archive';
+				}
+
+				$lower = strtolower($displayName);
+				if     ($lower === 'inbox')                        $displayName = 'Boîte de réception';
+				elseif ($lower === 'sent')                         $displayName = 'Envoyés';
+				elseif ($lower === 'drafts')                       $displayName = 'Brouillons';
+				elseif ($lower === 'trash')                        $displayName = 'Corbeille';
+				elseif ($lower === 'spam' || $lower === 'junk')    $displayName = 'Pourriel';
+				elseif ($lower === 'archive')                      $displayName = 'Archivé';
+
+				if ($lower === 'inbox' || $type === 'inbox') {
+					$displayName = 'Boîte de réception';
+					$type        = 'inbox';
+				}
+
+				$folders[] = ['id' => $name, 'name' => $displayName, 'type' => $type];
 			}
 
-			usort($folders, function($a, $b) {
-				$order = array(
-					'inbox' => 1,
-					'sent' => 2,
-					'drafts' => 3,
-					'archive' => 4,
-					'spam' => 5,
-					'trash' => 6,
-					'folder' => 10
-				);
-
-				$weightA = isset($order[$a['type']]) ? $order[$a['type']] : 10;
-				$weightB = isset($order[$b['type']]) ? $order[$b['type']] : 10;
-
-				if ($weightA == $weightB) {
-					return strcasecmp($a['name'], $b['name']);
-				}
-				return $weightA - $weightB;
+			usort($folders, static function ($a, $b) {
+				$order = ['inbox' => 1, 'sent' => 2, 'drafts' => 3, 'archive' => 4, 'spam' => 5, 'trash' => 6, 'folder' => 10];
+				$wa = isset($order[$a['type']]) ? $order[$a['type']] : 10;
+				$wb = isset($order[$b['type']]) ? $order[$b['type']] : 10;
+				return ($wa === $wb) ? strcasecmp($a['name'], $b['name']) : ($wa - $wb);
 			});
-		}
 
-		return $folders;
+			return $folders;
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return [];
+		}
 	}
 
 	/**
-	 * Move a message to another folder (e.g. Trash).
-	 *
-	 * Uses CP_UID so $uid is treated as a UID, not a sequence number.
-	 * Calls imap_expunge() immediately so the source folder is cleaned up.
+	 * Move a message to another folder.
 	 *
 	 * @param int    $uid         Message UID
 	 * @param string $dest_folder Destination folder name (UTF-8)
-	 * @return bool               True on success, false on failure ($this->error is set)
+	 * @return bool               True on success
 	 */
 	public function moveMessage($uid, $dest_folder)
 	{
-		if (!$this->mbox) return false;
+		if (!$this->client) return false;
 
-		$dest = imap_utf7_encode($dest_folder);
-		// CP_UID: $uid is a UID, not a sequence number
-		if (!imap_mail_move($this->mbox, (string)$uid, $dest, CP_UID)) {
-			$this->error = "Failed to move message: " . imap_last_error();
+		try {
+			$this->client->copy($this->mailbox, new Horde_Imap_Client_Mailbox($dest_folder), [
+				'ids'  => new Horde_Imap_Client_Ids([$uid]),
+				'move' => true,
+			]);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
 			return false;
 		}
-		imap_expunge($this->mbox);
-		return true;
 	}
 
 	/**
 	 * Permanently delete a message (mark \Deleted + expunge).
 	 *
-	 * Uses FT_UID so $uid is treated as a UID, not a sequence number.
-	 *
 	 * @param int $uid  Message UID
-	 * @return bool     True on success, false on failure ($this->error is set)
+	 * @return bool     True on success
 	 */
 	public function deleteMessage($uid)
 	{
-		if (!$this->mbox) return false;
+		if (!$this->client) return false;
 
-		// FT_UID: $uid is a UID, not a sequence number
-		if (!imap_delete($this->mbox, (string)$uid, FT_UID)) {
-			$this->error = "Failed to delete message: " . imap_last_error();
+		try {
+			$this->client->store($this->mailbox, [
+				'ids' => new Horde_Imap_Client_Ids([$uid]),
+				'add' => ['\Deleted'],
+			]);
+			$this->client->expunge($this->mailbox);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
 			return false;
 		}
-		imap_expunge($this->mbox);
-		return true;
 	}
 
 	/**
 	 * Append a raw MIME message to a folder (used to save a copy in Sent).
 	 *
 	 * @param string $folder   Destination folder name (UTF-8)
-	 * @param string $message  Complete raw MIME message string
-	 * @return bool            True on success, false on failure ($this->error is set)
+	 * @param string $message  Complete raw MIME message
+	 * @return bool            True on success
 	 */
 	public function appendMessage($folder, $message)
 	{
-		if (!$this->mbox) return false;
+		if (!$this->client) return false;
 
-		$targetBox = $this->conn_string_base . imap_utf7_encode($folder);
-
-		// \Seen flag sets the message as read in the Sent folder
-		if (imap_append($this->mbox, $targetBox, $message, "\\Seen")) {
+		try {
+			$this->client->append(new Horde_Imap_Client_Mailbox($folder), [
+				['data' => $message, 'flags' => ['\Seen']],
+			]);
 			return true;
-		} else {
-			$this->error = "Failed to append message to folder: " . imap_last_error();
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
 			return false;
 		}
 	}
@@ -543,42 +458,174 @@ class IMAPClient
 	/**
 	 * Set a user-defined keyword flag on a message.
 	 *
-	 * The keyword must be a single ASCII word without spaces (IMAP RFC 3501 §2.3.2).
-	 * Not all IMAP servers support user-defined keywords; failure is silently ignored.
-	 *
-	 * @param  int    $uid      Message UID
-	 * @param  string $keyword  IMAP keyword, e.g. "Urgent"
-	 * @return bool             True on success
+	 * @param int    $uid      Message UID
+	 * @param string $keyword  ASCII keyword without spaces
+	 * @return bool            True on success
 	 */
 	public function setKeyword($uid, $keyword)
 	{
-		if (!$this->mbox) return false;
-		return (bool) imap_setflag_full($this->mbox, (string)$uid, $keyword, ST_UID);
+		if (!$this->client) return false;
+
+		try {
+			$this->client->store($this->mailbox, [
+				'ids' => new Horde_Imap_Client_Ids([$uid]),
+				'add' => [$keyword],
+			]);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			return false;
+		}
 	}
 
 	/**
 	 * Clear a user-defined keyword flag from a message.
 	 *
-	 * @param  int    $uid      Message UID
-	 * @param  string $keyword  IMAP keyword to remove
-	 * @return bool             True on success
+	 * @param int    $uid      Message UID
+	 * @param string $keyword  Keyword to remove
+	 * @return bool            True on success
 	 */
 	public function clearKeyword($uid, $keyword)
 	{
-		if (!$this->mbox) return false;
-		return (bool) imap_clearflag_full($this->mbox, (string)$uid, $keyword, ST_UID);
+		if (!$this->client) return false;
+
+		try {
+			$this->client->store($this->mailbox, [
+				'ids'    => new Horde_Imap_Client_Ids([$uid]),
+				'remove' => [$keyword],
+			]);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			return false;
+		}
 	}
 
 	/**
-	 * Close the IMAP stream.
+	 * Close the IMAP session.
 	 *
 	 * @return void
 	 */
 	public function close()
 	{
-		if ($this->mbox) {
-			imap_close($this->mbox);
-			$this->mbox = null;
+		if ($this->client) {
+			try { $this->client->logout(); } catch (Exception $e) {}
+			$this->client = null;
 		}
+	}
+
+	// ── QRESYNC ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Return an opaque sync token encoding the current mailbox state
+	 * (UIDVALIDITY, HIGHESTMODSEQ, UIDNEXT, message count).
+	 *
+	 * Store this token client-side (JS localStorage or DB) and pass it to
+	 * getDelta() on the next refresh to receive only the changes.
+	 *
+	 * Returns null if the server does not support CONDSTORE.
+	 *
+	 * @return string|null  Opaque base64 token, or null on failure
+	 */
+	public function getSyncToken()
+	{
+		if (!$this->client) return null;
+
+		try {
+			return $this->client->getSyncToken($this->mailbox);
+		} catch (Horde_Imap_Client_Exception $e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Return the delta since the given sync token (QRESYNC/CONDSTORE).
+	 *
+	 * On UIDVALIDITY change (folder recreated), returns ['full_resync' => true]
+	 * and the caller must discard local state and reload from scratch.
+	 *
+	 * Returns null if the server doesn't support CONDSTORE or the token is bad.
+	 *
+	 * @param string $token      Token previously obtained from getSyncToken()
+	 * @param int[]  $knownUids  Optional: UIDs known to the client; enables VANISHED
+	 *                           detection even without server-side QRESYNC support
+	 * @return array|null [
+	 *   'full_resync' => bool,
+	 *   'newmsgs'     => int[],   UIDs of new messages (empty if none)
+	 *   'changed'     => int[],   UIDs whose flags changed
+	 *   'vanished'    => int[],   UIDs that disappeared (requires QRESYNC or $knownUids)
+	 *   'token'       => string,  Updated token to store for next call
+	 * ]
+	 */
+	public function getDelta($token, $knownUids = [])
+	{
+		if (!$this->client || !$token) return null;
+
+		try {
+			$opts = [
+				'criteria' => Horde_Imap_Client::SYNC_NEWMSGSUIDS
+					| Horde_Imap_Client::SYNC_FLAGSUIDS
+					| Horde_Imap_Client::SYNC_VANISHEDUIDS,
+			];
+			if (!empty($knownUids)) {
+				$opts['ids'] = new Horde_Imap_Client_Ids($knownUids);
+			}
+
+			$sync = $this->client->sync($this->mailbox, $token, $opts);
+
+			return [
+				'full_resync' => false,
+				'newmsgs'     => ($sync->newmsgs  && $sync->newmsgsuids)  ? $sync->newmsgsuids->ids  : [],
+				'changed'     => ($sync->flags    && $sync->flagsuids)    ? $sync->flagsuids->ids    : [],
+				'vanished'    => ($sync->vanished && $sync->vanisheduids) ? $sync->vanisheduids->ids : [],
+				'token'       => $this->getSyncToken(),
+			];
+
+		} catch (Horde_Imap_Client_Exception_Sync $e) {
+			if ($e->getCode() === Horde_Imap_Client_Exception_Sync::UIDVALIDITY_CHANGED) {
+				return ['full_resync' => true, 'token' => $this->getSyncToken()];
+			}
+			return null;
+		} catch (Horde_Imap_Client_Exception $e) {
+			return null;
+		}
+	}
+
+	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Fetch the MIME structure for a message.
+	 *
+	 * @param int $uid
+	 * @return Horde_Mime_Part|null
+	 */
+	private function fetchStructure($uid)
+	{
+		$fq = new Horde_Imap_Client_Fetch_Query();
+		$fq->structure();
+
+		$res = $this->client->fetch($this->mailbox, $fq, [
+			'ids' => new Horde_Imap_Client_Ids([$uid]),
+		]);
+
+		if (!count($res)) return null;
+		return $res->first()->getStructure();
+	}
+
+	/**
+	 * Format the first address from a Horde_Mail_Rfc822_List as a string.
+	 *
+	 * @param Horde_Mail_Rfc822_List|null $list
+	 * @return string  "Name <email>" or "email", or empty string
+	 */
+	private function formatAddress($list)
+	{
+		if (!$list) return '';
+
+		foreach ($list as $addr) {
+			return $addr->personal
+				? $addr->personal . ' <' . $addr->bare_address . '>'
+				: $addr->bare_address;
+		}
+
+		return '';
 	}
 }

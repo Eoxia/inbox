@@ -1,0 +1,6 @@
+{
+    "name": "dolibarr-custom/inbox",
+    "require": {
+        "bytestream/horde-imap-client": "^2.34"
+    }
+}
