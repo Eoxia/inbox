@@ -213,6 +213,10 @@
 	flex-shrink: 0;
 }
 
+.inbox-list .inbox-panel-content {
+	padding: 0;
+}
+
 .inbox-search {
 	width: 100%;
 	padding: 8px 12px;
