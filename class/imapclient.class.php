@@ -303,9 +303,12 @@ class IMAPClient
 			]);
 			if (!count($res)) return '';
 
-			$content = (string) $res->first()->getBodyPart($bodyId);
+			$fetchData = $res->first();
+			$content   = (string) $fetchData->getBodyPart($bodyId);
 
 			$part    = $structure->getPart($bodyId);
+			$content = $this->transferDecode($content, $fetchData, $bodyId, $part);
+
 			$charset = $part ? $part->getCharset() : 'UTF-8';
 			if ($charset && strtolower($charset) !== 'utf-8') {
 				$content = (string) @mb_convert_encoding($content, 'UTF-8', $charset);
@@ -388,6 +391,9 @@ class IMAPClient
 		if (!$this->client) return '';
 
 		try {
+			$structure = $this->fetchStructure($uid);
+			$part      = $structure ? $structure->getPart($partno) : null;
+
 			$fq = new Horde_Imap_Client_Fetch_Query();
 			$fq->bodyPart($partno, ['decode' => true, 'peek' => true]);
 
@@ -396,7 +402,9 @@ class IMAPClient
 			]);
 			if (!count($res)) return '';
 
-			return (string) $res->first()->getBodyPart($partno);
+			$fetchData = $res->first();
+			$content   = (string) $fetchData->getBodyPart($partno);
+			return $this->transferDecode($content, $fetchData, $partno, $part);
 
 		} catch (Horde_Imap_Client_Exception $e) {
 			$this->error = $e->getMessage();
@@ -737,6 +745,35 @@ class IMAPClient
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────────
+
+	/**
+	 * Decode a raw body part string using the Content-Transfer-Encoding declared
+	 * in the MIME structure. Horde's 'decode => true' option in bodyPart() only
+	 * works when the server supports the BINARY IMAP extension (RFC 3516); most
+	 * servers — including Gmail — do not, so we must decode manually.
+	 *
+	 * @param string                        $content    Raw bytes from getBodyPart()
+	 * @param Horde_Imap_Client_Data_Fetch  $fetchData  The fetch result object
+	 * @param string                        $partId     Dotted MIME part ID
+	 * @param Horde_Mime_Part|null          $part       MIME part descriptor
+	 * @return string Decoded content
+	 */
+	private function transferDecode($content, $fetchData, $partId, $part)
+	{
+		// If the server decoded it via the BINARY extension, nothing to do.
+		if ($fetchData->getBodyPartDecode($partId) !== null) {
+			return $content;
+		}
+		if (!$part) return $content;
+
+		switch (strtolower((string) $part->getTransferEncoding())) {
+			case 'base64':
+				return (string) base64_decode(str_replace(["\r", "\n", ' '], '', $content));
+			case 'quoted-printable':
+				return quoted_printable_decode($content);
+		}
+		return $content;
+	}
 
 	/**
 	 * Fetch the MIME structure for a message.
