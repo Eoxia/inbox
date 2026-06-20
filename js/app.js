@@ -551,12 +551,12 @@ document.addEventListener('DOMContentLoaded', () => {
 						: null;
 
 					if (!previousUid) {
-						// No email was selected — just restore scroll position
-						container.scrollTop = previousScrollTop;
+						// No email was selected — restore scroll after browser has laid out new items
+						requestAnimationFrame(() => { container.scrollTop = previousScrollTop; });
 					} else if (prevItem) {
 						// Email still present: restore highlight and scroll position silently
 						prevItem.classList.add('active');
-						container.scrollTop = previousScrollTop;
+						requestAnimationFrame(() => { container.scrollTop = previousScrollTop; });
 					} else if (allItems.length > 0) {
 						// Selected email disappeared: navigate to nearest neighbor
 						const prevIndex = previousUids.indexOf(previousUid);
