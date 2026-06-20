@@ -44,6 +44,18 @@ InboxBlockRemoteImagesHelp=When enabled, remote images in emails are blocked unt
 InboxRemoteImagesBlocked=Remote images are blocked to protect your privacy.
 InboxShowImages=Show images
 
+# OAuth2 authentication
+InboxAuthType=Authentication mode
+InboxAuthTypeLabel=Authentication mode
+InboxAuthTypePassword=Password (standard)
+InboxAuthTypeOAuth2=OAuth2 (Google, Microsoft...)
+InboxOAuthService=OAuth2 provider
+InboxOAuthNoProvider=No IMAP-capable OAuth2 provider is configured.
+InboxOAuthConfigureLink=Configure OAuth2
+InboxOAuthStatus=Token status
+InboxOAuthStatusHelp=The OAuth2 token must be authorized via Dolibarr's OAuth page.
+InboxOAuthManageTokens=Manage OAuth2 tokens
+
 # Tags admin
 InboxTags=Tags
 InboxNewTag=New tag

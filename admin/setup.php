@@ -38,6 +38,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/oauth.lib.php';
 dol_include_once('/inbox/class/inboxaccount.class.php');
 dol_include_once('/inbox/lib/inbox.lib.php');
 
@@ -75,7 +76,9 @@ if ($action == 'add') {
 	if (empty($account->sync_limit_days)) $account->sync_limit_days = 180;
 	
 	$account->shared = GETPOST('shared', 'int') ? 1 : 0;
-	$account->status = 1;
+	$account->status = GETPOST('status', 'int') ? 1 : 0;
+	$account->auth_type = in_array(GETPOST('auth_type', 'alpha'), array('password', 'oauth2')) ? GETPOST('auth_type', 'alpha') : 'password';
+	$account->oauth_service = GETPOST('oauth_service', 'alphanohtml');
 
 	if (empty($account->label) || empty($account->email) || empty($account->imap_server)) {
 		setEventMessages($langs->trans("ErrorFieldRequired"), null, 'errors');
@@ -185,7 +188,10 @@ if ($action == 'add') {
 	if (empty($account->sync_limit_days)) $account->sync_limit_days = 180;
 	
 	$account->shared = GETPOST('shared', 'int') ? 1 : 0;
-	
+	$account->status = GETPOST('status', 'int') ? 1 : 0;
+	$account->auth_type = in_array(GETPOST('auth_type', 'alpha'), array('password', 'oauth2')) ? GETPOST('auth_type', 'alpha') : 'password';
+	$account->oauth_service = GETPOST('oauth_service', 'alphanohtml');
+
 	// Update directly for now (missing update method in class, so we use SQL for quick V1)
 	$sql = "UPDATE ".MAIN_DB_PREFIX."inbox_account SET ";
 	$sql .= "label = '".$db->escape($account->label)."', email = '".$db->escape($account->email)."', ";
@@ -196,7 +202,8 @@ if ($action == 'add') {
 	$sql .= "smtp_security = '".$db->escape($account->smtp_security)."', smtp_login = '".$db->escape($account->smtp_login)."', ";
 	$sql .= "smtp_password = '".$db->escape($account->smtp_password)."', ";
 	$sql .= "sync_limit_nb = ".(int)$account->sync_limit_nb.", sync_limit_days = ".(int)$account->sync_limit_days.", ";
-	$sql .= "shared = ".(int)$account->shared." ";
+	$sql .= "auth_type = '".$db->escape($account->auth_type)."', oauth_service = '".$db->escape($account->oauth_service)."', ";
+	$sql .= "status = ".(int)$account->status.", shared = ".(int)$account->shared." ";
 	$sql .= "WHERE rowid = ".(int)$account->id;
 	
 	$resql = $db->query($sql);
@@ -254,6 +261,7 @@ if ($resql) {
 			print '<td>'.$obj->imap_server.'</td>';
 			print '<td>'.$obj->smtp_server.'</td>';
 			print '<td class="center">'.yn($obj->shared).'</td>';
+			print '<td class="center">'.($obj->status ? '<span class="badge badge-status4">'.$langs->trans("Active").'</span>' : '<span class="badge badge-status5">'.$langs->trans("Inactive").'</span>').'</td>';
 			print '<td class="center">';
 			print '<a href="'.$_SERVER["PHP_SELF"].'?action=test&id='.$obj->rowid.'" title="'.$langs->trans("TestConnection").'">'.img_picto($langs->trans("TestConnection"), 'email').'</a> &nbsp; ';
 			print '<a href="'.$_SERVER["PHP_SELF"].'?action=edit&id='.$obj->rowid.'" title="'.$langs->trans("Edit").'">'.img_edit().'</a> &nbsp; ';
@@ -304,7 +312,51 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<option value="starttls"'.($account->imap_security == 'starttls' ? ' selected' : '').'>STARTTLS</option>';
 	print '</select></td></tr>';
 	print '<tr><td class="fieldrequired">'.$langs->trans("Login").'</td><td><input type="text" name="imap_login" value="'.dol_escape_htmltag($account->imap_login).'" size="40"></td></tr>';
-	print '<tr><td class="fieldrequired">'.$langs->trans("Password").'</td><td><input type="password" name="imap_password" size="40">'.($action == 'edit'?' <span class="opacitymedium">Laissez vide pour conserver</span>':'').'</td></tr>';
+
+	// Authentication type
+	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("InboxAuthType").'</td></tr>';
+	print '<tr><td>'.$langs->trans("InboxAuthTypeLabel").'</td><td>';
+	print '<label style="margin-right:15px"><input type="radio" name="auth_type" value="password" id="auth_type_password"'.($account->auth_type != 'oauth2' ? ' checked' : '').'> '.$langs->trans("InboxAuthTypePassword").'</label>';
+	print '<label><input type="radio" name="auth_type" value="oauth2" id="auth_type_oauth2"'.($account->auth_type == 'oauth2' ? ' checked' : '').'> '.$langs->trans("InboxAuthTypeOAuth2").'</label>';
+	print '</td></tr>';
+
+	// Password row (hidden when OAuth2)
+	print '<tr id="row_imap_password"><td>'.$langs->trans("Password").'</td><td><input type="password" name="imap_password" size="40">'.($action == 'edit' ? ' <span class="opacitymedium">Laissez vide pour conserver</span>' : '').'</td></tr>';
+
+	// OAuth2 rows (hidden when password)
+	$supportedoauth2array = getSupportedOauth2Array();
+	$imapProviders = array();
+	foreach ($conf->global as $key => $val) {
+		if (!empty($val) && preg_match('/^OAUTH_(.+)_ID$/', $key, $m)) {
+			$servicekey = $m[1]; // e.g. GOOGLE, MICROSOFT3, MICROSOFT3-mykey
+			$providerbase = preg_replace('/-.*$/', '', $servicekey); // e.g. GOOGLE, MICROSOFT3
+			$arraykey = 'OAUTH_'.$providerbase.'_NAME';
+			if (isset($supportedoauth2array[$arraykey])) {
+				$scopes = $supportedoauth2array[$arraykey]['availablescopes'];
+				if (strpos($scopes, 'gmail_full') !== false || strpos($scopes, 'IMAP.AccessAsUser.All') !== false) {
+					$label = $supportedoauth2array[$arraykey]['name'].($servicekey !== $providerbase ? ' ('.$servicekey.')' : '');
+					$imapProviders[$servicekey] = $label;
+				}
+			}
+		}
+	}
+	print '<tr id="row_oauth_service" style="'.($account->auth_type == 'oauth2' ? '' : 'display:none').'"><td>'.$langs->trans("InboxOAuthService").'</td><td>';
+	if (empty($imapProviders)) {
+		print '<span class="opacitymedium">'.$langs->trans("InboxOAuthNoProvider").'</span>';
+		print ' <a href="'.DOL_URL_ROOT.'/admin/oauth.php">'.$langs->trans("InboxOAuthConfigureLink").'</a>';
+	} else {
+		print '<select name="oauth_service" id="oauth_service">';
+		print '<option value=""></option>';
+		foreach ($imapProviders as $skey => $slabel) {
+			print '<option value="'.dol_escape_htmltag($skey).'"'.($account->oauth_service == $skey ? ' selected' : '').'>'.dol_escape_htmltag($slabel).'</option>';
+		}
+		print '</select>';
+	}
+	print '</td></tr>';
+	print '<tr id="row_oauth_link" style="'.($account->auth_type == 'oauth2' ? '' : 'display:none').'"><td>'.$langs->trans("InboxOAuthStatus").'</td><td>';
+	print '<span class="opacitymedium">'.$langs->trans("InboxOAuthStatusHelp").'</span> ';
+	print '<a href="'.DOL_URL_ROOT.'/admin/oauth.php" target="_blank">'.$langs->trans("InboxOAuthManageTokens").'</a>';
+	print '</td></tr>';
 
 	// SMTP
 	print '<tr><td colspan="2" class="liste_titre">'.$langs->trans("SMTPConfig").'</td></tr>';
@@ -324,6 +376,17 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<tr><td>'.$langs->trans("InboxSyncLimitDays").'</td><td><input type="number" name="sync_limit_days" value="'.($account->sync_limit_days ? $account->sync_limit_days : '180').'" size="6"> <span class="opacitymedium">'.$langs->trans("InboxSyncLimitDaysDefault").'</span></td></tr>';
 
 	print '</table>';
+
+	print '<script>
+	document.querySelectorAll(\'input[name="auth_type"]\').forEach(function(r) {
+		r.addEventListener(\'change\', function() {
+			var isOAuth = (this.value === \'oauth2\');
+			document.getElementById(\'row_imap_password\').style.display = isOAuth ? \'none\' : \'\';
+			document.getElementById(\'row_oauth_service\').style.display = isOAuth ? \'\' : \'none\';
+			document.getElementById(\'row_oauth_link\').style.display = isOAuth ? \'\' : \'none\';
+		});
+	});
+	</script>';
 
 	print '<div class="center"><br>';
 	print '<input type="submit" class="button button-save" value="'.($action == 'edit' ? $langs->trans("Save") : $langs->trans("Add")).'">';

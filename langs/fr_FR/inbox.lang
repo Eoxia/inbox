@@ -44,6 +44,18 @@ InboxBlockRemoteImagesHelp=Si activé, les images distantes dans les emails sont
 InboxRemoteImagesBlocked=Les images distantes sont bloquées pour protéger votre vie privée.
 InboxShowImages=Afficher les images
 
+# OAuth2 authentication
+InboxAuthType=Mode d'authentification
+InboxAuthTypeLabel=Mode d'authentification
+InboxAuthTypePassword=Mot de passe (standard)
+InboxAuthTypeOAuth2=OAuth2 (Google, Microsoft...)
+InboxOAuthService=Fournisseur OAuth2
+InboxOAuthNoProvider=Aucun fournisseur OAuth2 compatible IMAP n'est configuré.
+InboxOAuthConfigureLink=Configurer OAuth2
+InboxOAuthStatus=Statut du jeton
+InboxOAuthStatusHelp=Le jeton OAuth2 doit être autorisé depuis la page OAuth2 de Dolibarr.
+InboxOAuthManageTokens=Gérer les jetons OAuth2
+
 # Tags admin
 InboxTags=Tags
 InboxNewTag=Nouveau tag

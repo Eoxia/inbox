@@ -46,7 +46,7 @@ class IMAPClient
 	 * @param string $folder    Mailbox to select (default: 'INBOX')
 	 * @return bool             True on success
 	 */
-	public function connect($host, $port, $security, $login, $password, $folder = 'INBOX')
+	public function connect($host, $port, $security, $login, $password, $folder = 'INBOX', $auth_type = 'password', $oauth_service = '')
 	{
 		$autoload = __DIR__.'/../vendor/autoload.php';
 		if (!file_exists($autoload)) {
@@ -62,14 +62,32 @@ class IMAPClient
 			$secure = 'tls';
 		}
 
+		$xoauth2_token = null;
+		if ($auth_type === 'oauth2' && !empty($oauth_service)) {
+			$xoauth2_token = $this->resolveOAuthToken($login, $oauth_service);
+			if ($xoauth2_token === false) {
+				return false;
+			}
+		}
+
 		try {
-			$this->client = new Horde_Imap_Client_Socket([
+			$params = [
 				'hostspec' => $host,
 				'port'     => (int) $port,
 				'secure'   => $secure,
 				'username' => $login,
-				'password' => $password,
-			]);
+			];
+			if ($xoauth2_token !== null) {
+				$params['xoauth2_token'] = $xoauth2_token;
+				// Horde checks strlen(password) before reaching the XOAUTH2 path
+				// (Socket.php:368). Set a non-empty placeholder so that check passes;
+				// the actual authentication uses xoauth2_token, not this value.
+				$params['password'] = 'xoauth2';
+			} else {
+				$params['password'] = $password;
+			}
+
+			$this->client = new Horde_Imap_Client_Socket($params);
 			$this->client->login();
 			$this->mailbox = new Horde_Imap_Client_Mailbox($folder);
 			$this->client->openMailbox($this->mailbox);
@@ -77,6 +95,89 @@ class IMAPClient
 		} catch (Horde_Imap_Client_Exception $e) {
 			$this->error = $e->getMessage();
 			$this->client = null;
+			return false;
+		}
+	}
+
+	/**
+	 * Retrieve and optionally refresh the OAuth2 access token for XOAUTH2.
+	 * Pattern follows Dolibarr's emailcollector module.
+	 *
+	 * @param string $login          IMAP login (used only for the Xoauth2 object)
+	 * @param string $oauth_service  Dolibarr OAuth service key, e.g. 'GOOGLE' or 'MICROSOFT3'
+	 * @return Horde_Imap_Client_Password_Xoauth2|false  Token object or false on error
+	 */
+	private function resolveOAuthToken($login, $oauth_service)
+	{
+		global $db, $conf;
+
+		require_once DOL_DOCUMENT_ROOT.'/includes/OAuth/bootstrap.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/oauth.lib.php';
+
+		$supportedoauth2array = getSupportedOauth2Array();
+
+		// oauth_service may be 'GOOGLE' or 'GOOGLE-mykeyforprovider'
+		if (preg_match('/^.*-/', $oauth_service)) {
+			$keyforprovider = preg_replace('/^.*-/', '', $oauth_service);
+		} else {
+			$keyforprovider = '';
+		}
+		$servicebase = preg_replace('/-.*$/', '', strtoupper($oauth_service));
+		$keyforsupportedoauth2array = 'OAUTH_'.$servicebase.'_NAME';
+
+		if (empty($supportedoauth2array[$keyforsupportedoauth2array])) {
+			$this->error = 'OAuth service '.$servicebase.' not found in supported providers';
+			return false;
+		}
+
+		$callbackfile = $supportedoauth2array[$keyforsupportedoauth2array]['callbackfile'];
+		$nameofservice = ucfirst(strtolower($callbackfile)).($keyforprovider ? '-'.$keyforprovider : '');
+		$keyforparamtenant = 'OAUTH_'.strtoupper($callbackfile).($keyforprovider ? '-'.$keyforprovider : '').'_TENANT';
+
+		$storage = new OAuth\Common\Storage\DoliStorage($db, $conf, $keyforprovider, getDolGlobalString($keyforparamtenant));
+
+		try {
+			$tokenobj = $storage->retrieveAccessToken($nameofservice);
+
+			// Refresh if expired (within 30 s margin)
+			$expire = false;
+			if (is_object($tokenobj) && method_exists($tokenobj, 'getEndOfLife')) {
+				$eol = $tokenobj->getEndOfLife();
+				if ($eol !== -9002 && $eol !== -9001 && time() > ($eol - 30)) {
+					$expire = true;
+				}
+			}
+
+			if (is_object($tokenobj) && $expire) {
+				$credentials = new OAuth\Common\Consumer\Credentials(
+					getDolGlobalString('OAUTH_'.$oauth_service.'_ID'),
+					getDolGlobalString('OAUTH_'.$oauth_service.'_SECRET'),
+					getDolGlobalString('OAUTH_'.$oauth_service.'_URLCALLBACK')
+				);
+				$serviceFactory = new \OAuth\ServiceFactory();
+				$oauthname      = explode('-', $nameofservice);
+				$scopes         = [];
+				if (preg_match('/^Microsoft/i', $nameofservice)) {
+					$tmp    = explode('-', $nameofservice);
+					$scopes = explode(',', getDolGlobalString('OAUTH_'.strtoupper($tmp[0]).(empty($tmp[1]) ? '' : '-'.$tmp[1]).'_SCOPE'));
+				}
+				$apiService    = $serviceFactory->createService($oauthname[0], $credentials, $storage, $scopes);
+				$refreshtoken  = $tokenobj->getRefreshToken();
+				$tokenobj      = $apiService->refreshAccessToken($tokenobj);
+				$tokenobj->setRefreshToken($refreshtoken);
+				$storage->storeAccessToken($nameofservice, $tokenobj);
+				$tokenobj = $storage->retrieveAccessToken($nameofservice);
+			}
+
+			if (!is_object($tokenobj)) {
+				$this->error = 'OAuth token not found for service '.$nameofservice;
+				return false;
+			}
+
+			return new Horde_Imap_Client_Password_Xoauth2($login, $tokenobj->getAccessToken());
+
+		} catch (Exception $e) {
+			$this->error = 'OAuth error: '.$e->getMessage();
 			return false;
 		}
 	}
@@ -332,6 +433,9 @@ class IMAPClient
 				$displayName = $name;
 				if (stripos($displayName, 'INBOX.') === 0) {
 					$displayName = substr($displayName, 6);
+				} elseif (preg_match('/^\[[^\]]+\]\/(.+)$/u', $displayName, $m)) {
+					// Strip Gmail-style namespace prefix: [Gmail]/, [Google Mail]/, etc.
+					$displayName = $m[1];
 				}
 
 				$type       = 'folder';
@@ -344,6 +448,7 @@ class IMAPClient
 						case '\trash':   $type = 'trash';   break;
 						case '\junk':    $type = 'spam';    break;
 						case '\archive': $type = 'archive'; break;
+						case '\all':     $type = 'archive'; break;
 					}
 				}
 
@@ -520,6 +625,24 @@ class IMAPClient
 			return true;
 		} catch (Horde_Imap_Client_Exception) {
 			return false;
+		}
+	}
+
+	/**
+	 * Return the number of unseen messages in a mailbox.
+	 *
+	 * @param string $folder  IMAP folder name (default INBOX)
+	 * @return int
+	 */
+	public function getUnseenCount($folder = 'INBOX')
+	{
+		if (!$this->client) return 0;
+		try {
+			$mb     = new Horde_Imap_Client_Mailbox($folder);
+			$status = $this->client->status($mb, Horde_Imap_Client::STATUS_UNSEEN);
+			return (int) $status['unseen'];
+		} catch (Horde_Imap_Client_Exception $e) {
+			return 0;
 		}
 	}
 
