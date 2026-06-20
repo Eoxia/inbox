@@ -550,21 +550,22 @@ document.addEventListener('DOMContentLoaded', () => {
 						? container.querySelector(`.email-item[data-uid="${previousUid}"]`)
 						: null;
 
-					if (prevItem) {
+					if (!previousUid) {
+						// No email was selected — just restore scroll position
+						container.scrollTop = previousScrollTop;
+					} else if (prevItem) {
 						// Email still present: restore highlight and scroll position silently
 						prevItem.classList.add('active');
 						container.scrollTop = previousScrollTop;
 					} else if (allItems.length > 0) {
-						// Email gone: find the nearest neighbor from the old ordered list
+						// Selected email disappeared: navigate to nearest neighbor
 						const prevIndex = previousUids.indexOf(previousUid);
 						const newUidSet = new Set(allItems.map(el => el.dataset.uid));
 						let candidate = null;
 
-						// Search forward from old position
 						for (let i = prevIndex + 1; i < previousUids.length && !candidate; i++) {
 							if (newUidSet.has(previousUids[i])) candidate = previousUids[i];
 						}
-						// Then backward
 						for (let i = prevIndex - 1; i >= 0 && !candidate; i--) {
 							if (newUidSet.has(previousUids[i])) candidate = previousUids[i];
 						}
