@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS llx_inbox_whatsapp_message (
+    rowid         INT(11)       NOT NULL AUTO_INCREMENT,
+    fk_account    INT(11)       NOT NULL,
+    wamid         VARCHAR(255)  NOT NULL,
+    direction     TINYINT(1)    NOT NULL DEFAULT 0,
+    from_phone    VARCHAR(50)   NOT NULL DEFAULT '',
+    from_name     VARCHAR(255)  NOT NULL DEFAULT '',
+    to_phone      VARCHAR(50)   NOT NULL DEFAULT '',
+    msg_type      VARCHAR(30)   NOT NULL DEFAULT 'text',
+    body          TEXT,
+    media_id      VARCHAR(255)  DEFAULT NULL,
+    media_mime    VARCHAR(100)  DEFAULT NULL,
+    media_name    VARCHAR(255)  DEFAULT NULL,
+    status        VARCHAR(20)   NOT NULL DEFAULT 'received',
+    date_message  DATETIME      NOT NULL,
+    date_creation DATETIME      NOT NULL,
+    PRIMARY KEY (rowid),
+    UNIQUE KEY uk_wamid (fk_account, wamid),
+    KEY idx_account_from  (fk_account, from_phone),
+    KEY idx_account_date  (fk_account, date_message)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

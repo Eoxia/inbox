@@ -27,16 +27,17 @@ class InboxProviderFactory
 	public static function create(InboxAccount $account)
 	{
 		switch ($account->provider_type) {
-			// Future providers — uncomment and create the corresponding class:
+			case 'whatsapp':
+				require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/WhatsAppProvider.php';
+				return new WhatsAppProvider();
+
+			// Future providers:
 			// case 'graph':
 			//     require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/GraphProvider.php';
 			//     return new GraphProvider();
 			// case 'gmail':
 			//     require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/GmailProvider.php';
 			//     return new GmailProvider();
-			// case 'whatsapp':
-			//     require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/WhatsAppProvider.php';
-			//     return new WhatsAppProvider();
 			// case 'sms':
 			//     require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/SmsProvider.php';
 			//     return new SmsProvider();

@@ -58,6 +58,23 @@ $obj = $db->fetch_object($resql);
 $account = new InboxAccount($db);
 $account->fetch($obj->rowid);
 
+// ── WhatsApp accounts: delegate to WhatsAppProvider ──────────────────────────
+if ($account->provider_type === 'whatsapp') {
+	require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/WhatsAppProvider.php';
+	$provider = new WhatsAppProvider();
+	if (!$provider->connect($account)) {
+		print json_encode(array('error' => $provider->getError()));
+		exit;
+	}
+	$waPhone = preg_replace('/[^0-9]/', '', $to);
+	if (!$provider->sendTextMessage($waPhone, strip_tags($body))) {
+		print json_encode(array('error' => 'WhatsApp send failed: '.$provider->getError()));
+		exit;
+	}
+	print json_encode(array('success' => true));
+	exit;
+}
+
 if (empty($account->smtp_server)) {
 	print json_encode(array('error' => 'SMTP server not configured for this account.'));
 	exit;
