@@ -26,8 +26,8 @@ if (!$res) {
 	die("Include of main fails");
 }
 
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -61,37 +61,33 @@ if (empty($folder)) {
 	$folder = 'INBOX';
 }
 
-$client = new IMAPClient();
-$connected = $client->connect(
-	$account->imap_server,
-	$account->imap_port,
-	$account->imap_security,
-	$account->imap_login,
-	$account->imap_password,
-	$folder,
-	$account->auth_type,
-	$account->oauth_service
-);
+$provider = InboxProviderFactory::create($account);
+$connected = $provider->connect($account, $folder);
 
 if (!$connected) {
-	print json_encode(array('error' => 'IMAP Connection failed: ' . $client->error));
+	print json_encode(array('error' => 'Connection failed: '.$provider->getError()));
 	exit;
 }
 
-$limit_nb = $account->sync_limit_nb ? $account->sync_limit_nb : 500;
+$limit_nb   = $account->sync_limit_nb   ? $account->sync_limit_nb   : 500;
 $limit_days = $account->sync_limit_days ? $account->sync_limit_days : 180;
-$offset = max(0, (int) GETPOST('offset', 'int'));
-$page_size = 50;
+$offset     = max(0, (int) GETPOST('offset', 'int'));
+$page_size  = 50;
+$threaded   = (int) GETPOST('threaded', 'int');
 
-$result = $client->getMessages($limit_nb, $limit_days, $offset, $page_size);
+if ($threaded) {
+	$result = $provider->getThreadedMessages($limit_days, $offset, $page_size);
+} else {
+	$result = $provider->getMessages($limit_nb, $limit_days, $offset, $page_size);
+}
 
 if ($result === false) {
-	print json_encode(array('error' => 'Failed to fetch messages: ' . $client->error));
-	$client->close();
+	print json_encode(array('error' => 'Failed to fetch messages: '.$provider->getError()));
+	$provider->close();
 	exit;
 }
 
-$client->close();
+$provider->close();
 
 print json_encode(array(
 	'success' => true,

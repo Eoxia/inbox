@@ -86,6 +86,9 @@ class InboxAccount extends CommonObject
 	/** @var string  OAuth service key (e.g. 'GOOGLE', 'MICROSOFT3') — only used when auth_type='oauth2' */
 	public $oauth_service = '';
 
+	/** @var string  Messaging provider type: 'imap' | 'graph' | 'gmail' | 'whatsapp' | 'sms' */
+	public $provider_type = 'imap';
+
 	/** @var string  Creation date (YYYY-MM-DD HH:MM:SS) */
 	public $date_creation;
 
@@ -118,7 +121,7 @@ class InboxAccount extends CommonObject
 		$sql = "INSERT INTO ".MAIN_DB_PREFIX."inbox_account (";
 		$sql .= "label, email, imap_server, imap_port, imap_security, imap_login, imap_password, ";
 		$sql .= "smtp_server, smtp_port, smtp_security, smtp_login, smtp_password, allow_self_signed, signature, ";
-		$sql .= "fk_user, sync_limit_nb, sync_limit_days, shared, status, auth_type, oauth_service, date_creation";
+		$sql .= "fk_user, sync_limit_nb, sync_limit_days, shared, status, auth_type, oauth_service, provider_type, date_creation";
 		$sql .= ") VALUES (";
 		$sql .= "'".$this->db->escape($this->label)."',";
 		$sql .= "'".$this->db->escape($this->email)."',";
@@ -141,6 +144,7 @@ class InboxAccount extends CommonObject
 		$sql .= (int) $this->status.",";
 		$sql .= "'".$this->db->escape($this->auth_type ?: 'password')."',";
 		$sql .= "'".$this->db->escape($this->oauth_service)."',";
+		$sql .= "'".$this->db->escape($this->provider_type ?: 'imap')."',";
 		$sql .= "'".$this->db->idate(dol_now())."'";
 		$sql .= ")";
 
@@ -198,6 +202,7 @@ class InboxAccount extends CommonObject
 				$this->status = $obj->status;
 				$this->auth_type = $obj->auth_type ?: 'password';
 				$this->oauth_service = $obj->oauth_service ?: '';
+				$this->provider_type = $obj->provider_type ?: 'imap';
 				return 1;
 			}
 			return 0;

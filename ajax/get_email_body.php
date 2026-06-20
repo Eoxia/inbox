@@ -28,8 +28,8 @@ if (!$res) {
 ini_set('display_errors', '0');
 error_reporting(0);
 
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -69,27 +69,18 @@ if (empty($folder)) {
 	$folder = 'INBOX';
 }
 
-$client = new IMAPClient();
-$connected = $client->connect(
-	$account->imap_server,
-	$account->imap_port,
-	$account->imap_security,
-	$account->imap_login,
-	$account->imap_password,
-	$folder,
-	$account->auth_type,
-	$account->oauth_service
-);
+$provider = InboxProviderFactory::create($account);
+$connected = $provider->connect($account, $folder);
 
 if (!$connected) {
-	print json_encode(array('error' => 'IMAP Connection failed: ' . $client->error));
+	print json_encode(array('error' => 'Connection failed: '.$provider->getError()));
 	exit;
 }
 
-$body        = $client->getMessageBody($uid);
-$attachments = $client->getAttachments($uid);
+$body        = $provider->getMessageBody((string) $uid);
+$attachments = $provider->getAttachments((string) $uid);
 
-$client->close();
+$provider->close();
 
 $json = json_encode(array(
 	'success'      => true,

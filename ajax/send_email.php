@@ -103,38 +103,30 @@ $mailfile = new CMailFile(
 $res_send = $mailfile->sendfile();
 
 if ($res_send) {
-	// -----------------------------------------------------
-	// Save a copy to the IMAP "Sent" folder
-	// -----------------------------------------------------
-	require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/imapclient.class.php';
-	
-	$client = new IMAPClient();
-	if ($client->connect($account->imap_server, $account->imap_port, $account->imap_security, $account->imap_login, $account->imap_password, 'INBOX', $account->auth_type, $account->oauth_service)) {
-		
-		$folders = $client->getFolders();
+	// Save a copy to the Sent folder
+	require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
+	$provider = InboxProviderFactory::create($account);
+	if ($provider->connect($account)) {
 		$sentFolderId = '';
-		foreach ($folders as $f) {
+		foreach ($provider->getFolders() as $f) {
 			if ($f['type'] == 'sent') {
 				$sentFolderId = $f['id'];
 				break;
 			}
 		}
-		
 		if ($sentFolderId) {
-			$rawMessage = "From: " . $account->email . "\r\n";
-			$rawMessage .= "To: " . $to . "\r\n";
-			if (!empty($cc)) $rawMessage .= "Cc: " . $cc . "\r\n";
-			$rawMessage .= "Subject: " . $subject . "\r\n";
-			$rawMessage .= "Date: " . date("r") . "\r\n";
+			$rawMessage  = "From: ".$account->email."\r\n";
+			$rawMessage .= "To: ".$to."\r\n";
+			if (!empty($cc)) $rawMessage .= "Cc: ".$cc."\r\n";
+			$rawMessage .= "Subject: ".$subject."\r\n";
+			$rawMessage .= "Date: ".date("r")."\r\n";
 			$rawMessage .= "MIME-Version: 1.0\r\n";
 			$rawMessage .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
 			$rawMessage .= $body;
-			
-			$client->appendMessage($sentFolderId, $rawMessage);
+			$provider->appendMessage($sentFolderId, $rawMessage);
 		}
-		$client->close();
+		$provider->close();
 	}
-	// -----------------------------------------------------
 
 	print json_encode(array('success' => true));
 } else {

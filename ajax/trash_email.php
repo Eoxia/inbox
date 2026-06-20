@@ -21,7 +21,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -60,30 +60,21 @@ $obj = $db->fetch_object($resql);
 $account = new InboxAccount($db);
 $account->fetch($obj->rowid);
 
-$client = new IMAPClient();
-$connected = $client->connect(
-	$account->imap_server,
-	$account->imap_port,
-	$account->imap_security,
-	$account->imap_login,
-	$account->imap_password,
-	$folder,
-	$account->auth_type,
-	$account->oauth_service
-);
+$provider = InboxProviderFactory::create($account);
+$connected = $provider->connect($account, $folder);
 
 if (!$connected) {
-	print json_encode(array('error' => 'IMAP Connection failed: '.$client->error));
+	print json_encode(array('error' => 'Connection failed: '.$provider->getError()));
 	exit;
 }
 
 if (!empty($trash_folder) && $trash_folder !== $folder) {
-	$ok = $client->moveMessage($uid, $trash_folder);
+	$ok = $provider->moveMessage((string) $uid, $trash_folder);
 } else {
-	$ok = $client->deleteMessage($uid);
+	$ok = $provider->deleteMessage((string) $uid);
 }
 
-$client->close();
+$provider->close();
 
 if (!$ok) {
 	print json_encode(array('error' => $client->error));

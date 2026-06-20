@@ -21,7 +21,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -64,25 +64,16 @@ $obj = $db->fetch_object($resql);
 $account = new InboxAccount($db);
 $account->fetch($obj->rowid);
 
-$client = new IMAPClient();
-$connected = $client->connect(
-	$account->imap_server,
-	$account->imap_port,
-	$account->imap_security,
-	$account->imap_login,
-	$account->imap_password,
-	$folder,
-	$account->auth_type,
-	$account->oauth_service
-);
+$provider = InboxProviderFactory::create($account);
+$connected = $provider->connect($account, $folder);
 
 if (!$connected) {
 	http_response_code(500);
-	exit('IMAP connection failed: '.$client->error);
+	exit('Connection failed: '.$provider->getError());
 }
 
-$data = $client->getAttachmentData($uid, $partno, $encoding);
-$client->close();
+$data = $provider->getAttachmentData((string) $uid, $partno, $encoding);
+$provider->close();
 
 if ($data === '' || $data === false) {
 	http_response_code(404);

@@ -25,8 +25,8 @@ if (!$res) {
 	die("Include of main fails");
 }
 
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT .'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -55,25 +55,16 @@ $obj = $db->fetch_object($resql);
 $account = new InboxAccount($db);
 $account->fetch($obj->rowid);
 
-$client = new IMAPClient();
-$connected = $client->connect(
-	$account->imap_server,
-	$account->imap_port,
-	$account->imap_security,
-	$account->imap_login,
-	$account->imap_password,
-	'INBOX',
-	$account->auth_type,
-	$account->oauth_service
-);
+$provider = InboxProviderFactory::create($account);
+$connected = $provider->connect($account);
 
 if (!$connected) {
-	print json_encode(array('error' => 'IMAP Connection failed: ' . $client->error));
+	print json_encode(array('error' => 'Connection failed: '.$provider->getError()));
 	exit;
 }
 
-$folders = $client->getFolders();
-$client->close();
+$folders = $provider->getFolders();
+$provider->close();
 
 $json = json_encode(array(
 	'success' => true,

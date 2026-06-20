@@ -20,7 +20,8 @@ if (!$res) {
 	die("Include of main fails");
 }
 
-require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 
 global $db, $user;
 
@@ -31,8 +32,7 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
-$sql = "SELECT rowid, imap_server, imap_port, imap_security, imap_login, imap_password, auth_type, oauth_service"
-	." FROM ".MAIN_DB_PREFIX."inbox_account"
+$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account"
 	." WHERE status = 1 AND (fk_user = ".((int) $user->id)." OR shared = 1)"
 	." ORDER BY rowid ASC";
 
@@ -44,20 +44,15 @@ if (!$resql) {
 
 $counts = array();
 while ($obj = $db->fetch_object($resql)) {
-	$client    = new IMAPClient();
-	$connected = $client->connect(
-		$obj->imap_server,
-		$obj->imap_port,
-		$obj->imap_security,
-		$obj->imap_login,
-		$obj->imap_password,
-		'INBOX',
-		$obj->auth_type,
-		$obj->oauth_service
-	);
+	$account = new InboxAccount($db);
+	if ($account->fetch((int) $obj->rowid) <= 0) {
+		continue;
+	}
+	$provider  = InboxProviderFactory::create($account);
+	$connected = $provider->connect($account);
 	if ($connected) {
-		$counts[(int) $obj->rowid] = $client->getUnseenCount('INBOX');
-		$client->close();
+		$counts[(int) $obj->rowid] = $provider->getUnseenCount('INBOX');
+		$provider->close();
 	}
 }
 

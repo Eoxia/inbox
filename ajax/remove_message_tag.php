@@ -15,7 +15,7 @@ if (!($res && preg_match('/^http/', $res))) $res = @include '../../../main.inc.p
 if (!$res) die("Include of main fails");
 
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxaccount.class.php';
-require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/imapclient.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/InboxProviderFactory.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxtag.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/inbox/class/inboxmessagetag.class.php';
 
@@ -56,11 +56,10 @@ if (!empty($tag->imap_keyword) && $message_uid) {
 	$account = new InboxAccount($db);
 	$account->fetch($fk_account);
 
-	$client = new IMAPClient();
-	if ($client->connect($account->imap_server, $account->imap_port, $account->imap_security,
-		$account->imap_login, $account->imap_password, $folder, $account->auth_type, $account->oauth_service)) {
-		$client->clearKeyword($message_uid, $tag->imap_keyword);
-		$client->close();
+	$provider = InboxProviderFactory::create($account);
+	if ($provider->connect($account, $folder)) {
+		$provider->clearKeyword((string) $message_uid, $tag->imap_keyword);
+		$provider->close();
 	}
 }
 
