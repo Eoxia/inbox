@@ -60,24 +60,11 @@ llxHeader($head, $langs->trans($page_name));
 		</div>
 		<div class="inbox-panel-content" id="email-list-container">
 			<!-- Email items injected via JS -->
-			<div class="email-item unread active">
-				<div class="email-item-header">
-					<span class="email-sender">Dolibarr Sales</span>
-					<span class="email-date">31 mars</span>
-				</div>
-				<div class="email-subject">Project Update</div>
-				<div class="email-tags">
-					<span class="tag tag-blue">Projet</span>
-					<span class="tag tag-red">Urgent</span>
-				</div>
-				<div class="email-snippet">Hi John, just wanted to give you a quick update on the project...</div>
-				<div class="email-meta"><i class="fa fa-comment"></i> 2 commentaires</div>
-			</div>
 		</div>
 	</div>
 
 	<!-- Panel 3: Email View -->
-	<div class="inbox-panel inbox-view" id="panel-view">
+	<div class="inbox-panel inbox-view" id="panel-view" style="display:none;">
 		<div class="inbox-panel-header">
 			<div class="header-actions">
 				<button class="btn-icon"><i class="fa fa-trash"></i></button>
@@ -87,7 +74,7 @@ llxHeader($head, $langs->trans($page_name));
 		</div>
 		<div class="inbox-panel-content">
 			<div class="email-view-header">
-				<h2 class="email-view-subject">Project Update</h2>
+				<h2 class="email-view-subject"></h2>
 				<div class="email-view-tags" id="email-view-tags">
 					<!-- Tags injected by JS -->
 					<div class="tag-picker-wrapper" id="tag-picker-wrapper" style="display:none;">
@@ -99,12 +86,12 @@ llxHeader($head, $langs->trans($page_name));
 				</div>
 			</div>
 			<div class="email-view-sender-info">
-				<div class="sender-avatar">D</div>
+				<div class="sender-avatar"></div>
 				<div class="sender-details">
-					<div class="sender-name">Dolibarr Sales <a href="#" class="link-erp"><i class="fa fa-user"></i> Fiche Contact ERP</a></div>
-					<div class="sender-email">À: sales@dolibarr.org</div>
+					<div class="sender-name"></div>
+					<div class="sender-email"></div>
 				</div>
-				<div class="email-view-date">31 mars 2026, 11:00</div>
+				<div class="email-view-date"></div>
 			</div>
 
 			<div id="remote-images-banner" class="remote-images-banner" style="display:none;">
@@ -113,9 +100,7 @@ llxHeader($head, $langs->trans($page_name));
 				<button id="btn-show-images" class="btn-show-images"><?php echo $langs->trans('InboxShowImages'); ?></button>
 			</div>
 
-			<div class="email-view-body">
-				<p>Hi John, just wanted to give you a quick update on the project. Everything is on track for the Friday deadline.</p>
-			</div>
+			<div class="email-view-body"></div>
 
 			<div id="reply-form-container" style="display: none; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
 				<h3 style="margin-bottom: 15px; font-size: 1.1em; color: #1e293b;"><?php echo $langs->trans('InboxReply'); ?></h3>
