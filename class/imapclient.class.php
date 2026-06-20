@@ -297,6 +297,7 @@ class IMAPClient
 
 			$fq = new Horde_Imap_Client_Fetch_Query();
 			$fq->bodyPart($bodyId, ['decode' => true, 'peek' => true]);
+			$fq->mimeHeader($bodyId, ['peek' => true]);
 
 			$res = $this->client->fetch($this->mailbox, $fq, [
 				'ids' => new Horde_Imap_Client_Ids([$uid]),
@@ -305,10 +306,9 @@ class IMAPClient
 
 			$fetchData = $res->first();
 			$content   = (string) $fetchData->getBodyPart($bodyId);
+			$content   = $this->transferDecode($content, $fetchData, $bodyId);
 
 			$part    = $structure->getPart($bodyId);
-			$content = $this->transferDecode($content, $fetchData, $bodyId, $part);
-
 			$charset = $part ? $part->getCharset() : 'UTF-8';
 			if ($charset && strtolower($charset) !== 'utf-8') {
 				$content = (string) @mb_convert_encoding($content, 'UTF-8', $charset);
@@ -391,11 +391,9 @@ class IMAPClient
 		if (!$this->client) return '';
 
 		try {
-			$structure = $this->fetchStructure($uid);
-			$part      = $structure ? $structure->getPart($partno) : null;
-
 			$fq = new Horde_Imap_Client_Fetch_Query();
 			$fq->bodyPart($partno, ['decode' => true, 'peek' => true]);
+			$fq->mimeHeader($partno, ['peek' => true]);
 
 			$res = $this->client->fetch($this->mailbox, $fq, [
 				'ids' => new Horde_Imap_Client_Ids([$uid]),
@@ -404,7 +402,7 @@ class IMAPClient
 
 			$fetchData = $res->first();
 			$content   = (string) $fetchData->getBodyPart($partno);
-			return $this->transferDecode($content, $fetchData, $partno, $part);
+			return $this->transferDecode($content, $fetchData, $partno);
 
 		} catch (Horde_Imap_Client_Exception $e) {
 			$this->error = $e->getMessage();
@@ -747,26 +745,32 @@ class IMAPClient
 	// ── Private helpers ───────────────────────────────────────────────────────
 
 	/**
-	 * Decode a raw body part string using the Content-Transfer-Encoding declared
-	 * in the MIME structure. Horde's 'decode => true' option in bodyPart() only
-	 * works when the server supports the BINARY IMAP extension (RFC 3516); most
-	 * servers — including Gmail — do not, so we must decode manually.
+	 * Decode a raw body part using its Content-Transfer-Encoding.
 	 *
-	 * @param string                        $content    Raw bytes from getBodyPart()
-	 * @param Horde_Imap_Client_Data_Fetch  $fetchData  The fetch result object
-	 * @param string                        $partId     Dotted MIME part ID
-	 * @param Horde_Mime_Part|null          $part       MIME part descriptor
+	 * Horde's 'decode => true' in bodyPart() only works when the IMAP server
+	 * supports the BINARY extension (RFC 3516). Gmail and most servers do not,
+	 * so we decode manually from the CTE string obtained via mimeHeader().
+	 *
+	 * @param string                       $content   Raw bytes from getBodyPart()
+	 * @param Horde_Imap_Client_Data_Fetch $fetchData Fetch result object
+	 * @param string                       $partId    Dotted MIME part ID
 	 * @return string Decoded content
 	 */
-	private function transferDecode($content, $fetchData, $partId, $part)
+	private function transferDecode($content, $fetchData, $partId)
 	{
-		// If the server decoded it via the BINARY extension, nothing to do.
+		// Server decoded via BINARY extension — nothing to do.
 		if ($fetchData->getBodyPartDecode($partId) !== null) {
 			return $content;
 		}
-		if (!$part) return $content;
 
-		switch (strtolower((string) $part->getTransferEncoding())) {
+		// Parse CTE from the raw MIME header string fetched alongside the body.
+		$cte = '';
+		$mhRaw = (string) $fetchData->getMimeHeader($partId);
+		if (preg_match('/^content-transfer-encoding:\s*(\S+)/im', $mhRaw, $m)) {
+			$cte = strtolower(trim($m[1]));
+		}
+
+		switch ($cte) {
 			case 'base64':
 				return (string) base64_decode(str_replace(["\r", "\n", ' '], '', $content));
 			case 'quoted-printable':
