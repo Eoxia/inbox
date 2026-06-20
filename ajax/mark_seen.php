@@ -76,7 +76,8 @@ if (!$connected) {
 	exit;
 }
 
-$ok = $client->markSeen($uid);
+$seen = GETPOST('seen', 'int');
+$ok = ($seen === '0' || $seen === 0) ? $client->markUnseen($uid) : $client->markSeen($uid);
 $client->close();
 
 if (!$ok) {

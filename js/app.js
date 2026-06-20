@@ -227,7 +227,51 @@ document.addEventListener('DOMContentLoaded', () => {
 				<span class="email-date">${email.date}</span>
 			</div>
 			<div class="email-subject">${email.subject}</div>
+			<div class="email-item-actions">
+				<button class="email-action-btn btn-item-seen" title="${email.seen ? 'Marquer non lu' : 'Marquer lu'}">
+					<i class="fa ${email.seen ? 'fa-envelope' : 'fa-envelope-open'}"></i>
+				</button>
+				<button class="email-action-btn btn-item-trash" title="Mettre à la corbeille">
+					<i class="fa fa-trash"></i>
+				</button>
+			</div>
 		`;
+
+		// Toggle read/unread
+		el.querySelector('.btn-item-seen').addEventListener('click', (e) => {
+			e.stopPropagation();
+			const isUnread = el.classList.contains('unread');
+			el.classList.toggle('unread', !isUnread);
+			const btn = e.currentTarget;
+			const icon = btn.querySelector('i');
+			icon.className = isUnread ? 'fa fa-envelope' : 'fa fa-envelope-open';
+			btn.title = isUnread ? 'Marquer non lu' : 'Marquer lu';
+			const fd = new URLSearchParams({ uid: email.uid, folder: currentFolder, account_id: currentAccountId, seen: isUnread ? 1 : 0 });
+			fetch('../../custom/inbox/ajax/mark_seen.php', { method: 'POST', body: fd })
+				.then(() => fetchUnreadCounts())
+				.catch(() => {});
+		});
+
+		// Trash
+		el.querySelector('.btn-item-trash').addEventListener('click', (e) => {
+			e.stopPropagation();
+			const fd = new FormData();
+			fd.append('uid', email.uid);
+			fd.append('folder', currentFolder);
+			fd.append('account_id', currentAccountId);
+			if (trashFolder) fd.append('trash_folder', trashFolder);
+			fetch('../../custom/inbox/ajax/trash_email.php', { method: 'POST', body: fd })
+				.then(r => r.json())
+				.then(data => {
+					if (data.success) {
+						el.remove();
+						if (currentEmail && String(currentEmail.uid) === String(email.uid)) clearViewPanel();
+						fetchUnreadCounts();
+					}
+				})
+				.catch(() => {});
+		});
+
 		el.addEventListener('click', (e) => {
 			document.querySelectorAll('.email-item').forEach(em => em.classList.remove('active'));
 			e.currentTarget.classList.add('active');

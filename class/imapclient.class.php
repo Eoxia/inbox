@@ -546,6 +546,28 @@ class IMAPClient
 	}
 
 	/**
+	 * Mark a message as unseen (remove \Seen flag).
+	 *
+	 * @param int $uid  Message UID
+	 * @return bool     True on success
+	 */
+	public function markUnseen($uid)
+	{
+		if (!$this->client) return false;
+
+		try {
+			$this->client->store($this->mailbox, [
+				'ids'    => new Horde_Imap_Client_Ids([(int) $uid]),
+				'remove' => ['\Seen'],
+			]);
+			return true;
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
 	 * Permanently delete a message (mark \Deleted + expunge).
 	 *
 	 * @param int $uid  Message UID
