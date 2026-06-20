@@ -39,6 +39,10 @@ InboxSendDelayLabel=Send cancellation delay (seconds)
 InboxSendDelayHelp=Number of seconds before the email is actually sent, allowing the user to cancel. (Default: 10)
 InboxRefreshIntervalLabel=Auto-refresh interval (seconds)
 InboxRefreshIntervalHelp=Automatic refresh of the email list. 0 = disabled. (Default: 0)
+InboxBlockRemoteImagesLabel=Block remote images by default
+InboxBlockRemoteImagesHelp=When enabled, remote images in emails are blocked until the user clicks to reveal them (recommended for privacy).
+InboxRemoteImagesBlocked=Remote images are blocked to protect your privacy.
+InboxShowImages=Show images
 
 # Tags admin
 InboxTags=Tags

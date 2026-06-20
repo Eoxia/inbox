@@ -29,7 +29,7 @@ if (empty($user->rights->inbox->read)) {
 $page_name = "Inbox";
 $head = '';
 $head .= '<link rel="stylesheet" type="text/css" href="'.DOL_URL_ROOT.'/custom/inbox/css/inbox.css">';
-$head .= '<script type="module" src="'.DOL_URL_ROOT.'/custom/inbox/js/app.js"></script>';
+$head .= '<script type="module" src="'.dol_buildpath('/inbox/js/app.js', 2).'"></script>';
 
 llxHeader($head, $langs->trans($page_name));
 
@@ -105,6 +105,12 @@ llxHeader($head, $langs->trans($page_name));
 					<div class="sender-email">À: sales@dolibarr.org</div>
 				</div>
 				<div class="email-view-date">31 mars 2026, 11:00</div>
+			</div>
+
+			<div id="remote-images-banner" class="remote-images-banner" style="display:none;">
+				<i class="fa fa-eye-slash"></i>
+				<span><?php echo $langs->trans('InboxRemoteImagesBlocked'); ?></span>
+				<button id="btn-show-images" class="btn-show-images"><?php echo $langs->trans('InboxShowImages'); ?></button>
 			</div>
 
 			<div class="email-view-body">

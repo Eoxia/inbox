@@ -54,6 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
 	let currentEmailBody = '';
 	let currentFolder = 'INBOX';
 	let trashFolder = null; // detected from folder list
+	let currentIframe = null;
+
+	// Replace remote src attributes with data-original-src to block external image loading
+	const blockRemoteImages = (html) => {
+		return html.replace(/\bsrc=(["'])(https?:\/\/[^"'>\s]+)\1/gi, 'data-original-src=$1$2$1');
+	};
 
 	// Pagination state
 	let emailPage = 0;
@@ -138,7 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		el.addEventListener('click', (e) => {
 			document.querySelectorAll('.email-item').forEach(em => em.classList.remove('active'));
 			e.currentTarget.classList.add('active');
-			e.currentTarget.classList.remove('unread');
+			if (e.currentTarget.classList.contains('unread')) {
+				e.currentTarget.classList.remove('unread');
+				const fd = new URLSearchParams({ uid: email.uid, folder: currentFolder });
+				fetch('../../custom/inbox/ajax/mark_seen.php', { method: 'POST', body: fd }).catch(() => {});
+			}
 
 			currentEmail = email;
 
@@ -209,7 +219,24 @@ document.addEventListener('DOMContentLoaded', () => {
 						iframe.setAttribute('sandbox', 'allow-same-origin allow-popups');
 						bodyContainer.innerHTML = '';
 						bodyContainer.appendChild(iframe);
-						iframe.srcdoc = bodyData.body;
+						currentIframe = iframe;
+
+						// Block remote images if requested
+						const imgBanner = document.getElementById('remote-images-banner');
+						let displayBody = bodyData.body;
+						if (bodyData.block_images) {
+							const blocked = blockRemoteImages(bodyData.body);
+							if (blocked !== bodyData.body) {
+								displayBody = blocked;
+								imgBanner.style.display = 'flex';
+							} else {
+								imgBanner.style.display = 'none';
+							}
+						} else {
+							imgBanner.style.display = 'none';
+						}
+
+						iframe.srcdoc = displayBody;
 						iframe.addEventListener('load', () => {
 							try {
 								const h = iframe.contentDocument.documentElement.scrollHeight;
@@ -922,6 +949,27 @@ document.addEventListener('DOMContentLoaded', () => {
 		// Submit on Ctrl+Enter
 		commentTextarea.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) commentBtn.click();
+		});
+	}
+
+	// Remote images banner: restore src attributes when user chooses to display images
+	const btnShowImages = document.getElementById('btn-show-images');
+	if (btnShowImages) {
+		btnShowImages.addEventListener('click', () => {
+			if (currentIframe && currentIframe.contentDocument) {
+				currentIframe.contentDocument.querySelectorAll('[data-original-src]').forEach(el => {
+					el.src = el.getAttribute('data-original-src');
+					el.removeAttribute('data-original-src');
+				});
+				// Resize iframe after images load
+				setTimeout(() => {
+					try {
+						const h = currentIframe.contentDocument.documentElement.scrollHeight;
+						currentIframe.style.height = Math.max(200, h) + 'px';
+					} catch (e) {}
+				}, 500);
+			}
+			document.getElementById('remote-images-banner').style.display = 'none';
 		});
 	}
 });

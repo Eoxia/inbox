@@ -92,15 +92,14 @@ $attachments = $client->getAttachments($uid);
 $client->close();
 
 $json = json_encode(array(
-	'success'     => true,
-	'body'        => $body,
-	'attachments' => $attachments,
+	'success'      => true,
+	'body'         => $body,
+	'attachments'  => $attachments,
+	'block_images' => (bool) getDolGlobalInt('INBOX_BLOCK_REMOTE_IMAGES', 1),
 ), JSON_INVALID_UTF8_SUBSTITUTE);
 
 if (!$json) {
 	$json = json_encode(array('error' => 'JSON encode failed: ' . json_last_error_msg()));
 }
-
-file_put_contents('c:/wamp64/logs/debug_inbox.txt', "msgno=$msgno, folder=$folder\nJSON:$json\nERROR:" . json_last_error_msg());
 
 print $json;

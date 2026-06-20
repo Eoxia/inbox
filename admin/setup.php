@@ -343,6 +343,8 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 		dolibarr_set_const($db, 'INBOX_SEND_DELAY', $delay, 'chaine', 0, '', $conf->entity);
 		$refresh = GETPOST('inbox_refresh_interval', 'int');
 		dolibarr_set_const($db, 'INBOX_REFRESH_INTERVAL', max(0, $refresh), 'chaine', 0, '', $conf->entity);
+		$block_images = GETPOST('inbox_block_remote_images', 'int') ? 1 : 0;
+		dolibarr_set_const($db, 'INBOX_BLOCK_REMOTE_IMAGES', $block_images, 'chaine', 0, '', $conf->entity);
 		setEventMessages($langs->trans("RecordSaved"), null, 'mesgs');
 	}
 
@@ -358,6 +360,10 @@ if (in_array($action, array('create', 'edit', 'add', 'update')) || $error) {
 	print '<tr><td class="titlefield">'.$langs->trans("InboxRefreshIntervalLabel").'</td><td>';
 	print '<input type="number" name="inbox_refresh_interval" value="'.getDolGlobalInt('INBOX_REFRESH_INTERVAL', 0).'" min="0" size="6">';
 	print ' <span class="opacitymedium">'.$langs->trans("InboxRefreshIntervalHelp").'</span>';
+	print '</td></tr>';
+	print '<tr><td class="titlefield">'.$langs->trans("InboxBlockRemoteImagesLabel").'</td><td>';
+	print '<input type="checkbox" name="inbox_block_remote_images" value="1"'.(getDolGlobalInt('INBOX_BLOCK_REMOTE_IMAGES', 1) ? ' checked' : '').'>';
+	print ' <span class="opacitymedium">'.$langs->trans("InboxBlockRemoteImagesHelp").'</span>';
 	print '</td></tr>';
 	print '</table>';
 	print '<div class="center"><br><input type="submit" class="button button-save" value="'.$langs->trans("Save").'"></div>';
