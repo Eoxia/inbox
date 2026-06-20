@@ -26,6 +26,45 @@ document.addEventListener('DOMContentLoaded', () => {
 		return parts;
 	};
 
+	// Relative / contextual date for the email list
+	const formatDate = (dateStr) => {
+		if (!dateStr) return '';
+		const date = new Date(dateStr.replace(' ', 'T'));
+		if (isNaN(date)) return dateStr;
+		const now   = new Date();
+		const diffMs  = now - date;
+		const diffMin = Math.floor(diffMs / 60000);
+		const diffH   = Math.floor(diffMs / 3600000);
+
+		if (diffMin < 1)  return 'À l\'instant';
+		if (diffMin < 60) return `${diffMin} min`;
+		// Same calendar day
+		if (date.toDateString() === now.toDateString()) {
+			return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+		}
+		// Yesterday
+		const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+		if (date.toDateString() === yest.toDateString()) {
+			return 'Hier ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+		}
+		// Same year
+		if (date.getFullYear() === now.getFullYear()) {
+			return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+		}
+		// Older
+		return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+	};
+
+	// Full date for the view panel header
+	const formatDateFull = (dateStr) => {
+		if (!dateStr) return '';
+		const date = new Date(dateStr.replace(' ', 'T'));
+		if (isNaN(date)) return dateStr;
+		return date.toLocaleDateString('fr-FR', {
+			weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+		}) + ' à ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+	};
+
 	const renderRecipients = (str) => {
 		return parseRecipients(str).map(r => {
 			const safeEmail = r.email.replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -224,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		el.innerHTML = `
 			<div class="email-item-header">
 				<span class="email-sender">${email.from}</span>
-				<span class="email-date">${email.date}</span>
+				<span class="email-date" title="${email.date}">${formatDate(email.date)}</span>
 			</div>
 			<div class="email-subject">${email.subject}</div>
 			<div class="email-item-actions">
@@ -286,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			document.getElementById('reply-form-container').style.display = 'none';
 
 			document.querySelector('.email-view-subject').innerText = email.subject;
-			document.querySelector('.email-view-date').innerText = email.date;
+			document.querySelector('.email-view-date').innerText = formatDateFull(email.date);
 
 			// Sender: show display name with email tooltip
 			const fromParsed = parseRecipients(email.from);
@@ -699,7 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				
 				// Set initial content (blockquote)
 				const blockquote = `<br><br><blockquote style="border-left: 2px solid #ccc; margin-left: 10px; padding-left: 10px; color: #666;">
-					<p>Le ${currentEmail.date}, ${currentEmail.from} a écrit :</p>
+					<p>Le ${formatDateFull(currentEmail.date)}, ${currentEmail.from} a écrit :</p>
 					${currentEmailBody}
 				</blockquote><p><br></p>`;
 				
