@@ -64,7 +64,7 @@ llxHeader($head, $langs->trans($page_name));
 	</div>
 
 	<!-- Panel 3: Email View -->
-	<div class="inbox-panel inbox-view" id="panel-view" style="display:none;">
+	<div class="inbox-panel inbox-view" id="panel-view">
 		<div class="inbox-panel-header">
 			<div class="header-actions">
 				<button class="btn-icon"><i class="fa fa-trash"></i></button>

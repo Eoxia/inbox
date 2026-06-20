@@ -56,6 +56,23 @@ document.addEventListener('DOMContentLoaded', () => {
 	let trashFolder = null; // detected from folder list
 	let currentIframe = null;
 
+	// Reset the view panel to an empty state without hiding it (keeps layout stable)
+	const clearViewPanel = () => {
+		currentEmail = null;
+		currentEmailBody = '';
+		currentIframe = null;
+		document.querySelector('.email-view-subject').innerText = '';
+		document.querySelector('.sender-avatar').textContent = '';
+		document.querySelector('.sender-name').innerHTML = '';
+		document.querySelector('.sender-email').innerHTML = '';
+		document.querySelector('.email-view-date').innerText = '';
+		document.querySelector('.email-view-body').innerHTML = '';
+		document.getElementById('remote-images-banner').style.display = 'none';
+		document.getElementById('reply-form-container').style.display = 'none';
+		document.getElementById('email-view-tags').querySelectorAll('.tag-dynamic').forEach(t => t.remove());
+		document.getElementById('email-attachment-bar')?.remove();
+	};
+
 	// Replace remote src attributes with data-original-src to block external image loading
 	const blockRemoteImages = (html) => {
 		return html.replace(/\bsrc=(["'])(https?:\/\/[^"'>\s]+)\1/gi, 'data-original-src=$1$2$1');
@@ -152,7 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			currentEmail = email;
 
-			document.getElementById('panel-view').style.display = 'flex';
 			document.getElementById('reply-form-container').style.display = 'none';
 
 			document.querySelector('.email-view-subject').innerText = email.subject;
@@ -403,9 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
 						if (target) target.click();
 					} else {
 						// List is now empty: clear the view panel
-						currentEmail = null;
-						currentEmailBody = '';
-						document.getElementById('panel-view').style.display = 'none';
+						clearViewPanel();
 					}
 				}
 			})
@@ -524,13 +538,10 @@ document.addEventListener('DOMContentLoaded', () => {
 					nextEl = sib;
 					activeEl.remove();
 				}
-				document.getElementById('reply-form-container').style.display = 'none';
-				currentEmail = null;
-				currentEmailBody = '';
 				if (nextEl) {
 					nextEl.click();
 				} else {
-					document.getElementById('panel-view').style.display = 'none';
+					clearViewPanel();
 				}
 			})
 			.catch(err => console.error('Trash fetch error:', err));
