@@ -492,10 +492,11 @@ document.addEventListener('DOMContentLoaded', () => {
 			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE)
 			+ '&account_id=' + encodeURIComponent(currentAccountId);
 
-		// Snapshot the ordered UIDs and selected UID before clearing
-		const previousUid  = currentEmail ? String(currentEmail.uid) : null;
-		const previousUids = Array.from(container.querySelectorAll('.email-item[data-uid]'))
+		// Snapshot the ordered UIDs, selected UID and scroll position before clearing
+		const previousUid       = currentEmail ? String(currentEmail.uid) : null;
+		const previousUids      = Array.from(container.querySelectorAll('.email-item[data-uid]'))
 			.map(el => el.dataset.uid);
+		const previousScrollTop = container.scrollTop;
 
 		const resetUI = () => {
 			if (syncIcon) syncIcon.classList.remove('fa-spin');
@@ -550,8 +551,9 @@ document.addEventListener('DOMContentLoaded', () => {
 						: null;
 
 					if (prevItem) {
-						// Email still present: restore highlight silently (no re-open)
+						// Email still present: restore highlight and scroll position silently
 						prevItem.classList.add('active');
+						container.scrollTop = previousScrollTop;
 					} else if (allItems.length > 0) {
 						// Email gone: find the nearest neighbor from the old ordered list
 						const prevIndex = previousUids.indexOf(previousUid);
@@ -570,7 +572,10 @@ document.addEventListener('DOMContentLoaded', () => {
 						const target = candidate
 							? container.querySelector(`.email-item[data-uid="${candidate}"]`)
 							: allItems[0];
-						if (target) target.click();
+						if (target) {
+							target.click();
+							target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+						}
 					} else {
 						// List is now empty: clear the view panel
 						clearViewPanel();
