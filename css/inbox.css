@@ -105,18 +105,25 @@
 	display: none;
 }
 
-.inbox-sidebar.collapsed .folder-list li {
+.inbox-sidebar.collapsed .folder-list li,
+.inbox-sidebar.collapsed .account-list li {
 	justify-content: center;
 	padding: 10px 0;
 }
 
-.inbox-sidebar.collapsed .folder-list li i {
+.inbox-sidebar.collapsed .folder-list li i,
+.inbox-sidebar.collapsed .account-list li i {
 	margin-right: 0;
 	width: auto;
 }
 
-.inbox-sidebar.collapsed .folder-name {
+.inbox-sidebar.collapsed .folder-name,
+.inbox-sidebar.collapsed .account-name {
 	display: none;
+}
+
+.inbox-sidebar.collapsed .folder-section {
+	border-top: none;
 }
 
 .btn-new-message {
@@ -158,6 +165,61 @@
 	margin-top: 20px;
 	margin-bottom: 10px;
 	text-transform: uppercase;
+}
+
+.account-list {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 4px 0;
+}
+
+.account-list li {
+	padding: 9px 15px;
+	border-radius: 6px;
+	cursor: pointer;
+	color: var(--text-primary);
+	display: flex;
+	align-items: center;
+	font-size: 14px;
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+
+.account-list li:hover {
+	background: #e2e8f0;
+}
+
+.account-list li.active {
+	background: var(--active-bg);
+	color: var(--primary-color);
+}
+
+.account-list li i {
+	margin-right: 10px;
+	width: 16px;
+	text-align: center;
+}
+
+.account-unread-badge {
+	margin-left: auto;
+	background: var(--primary-color);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	min-width: 18px;
+	padding: 2px 6px;
+	border-radius: 10px;
+	text-align: center;
+}
+
+.account-list li.active .account-unread-badge {
+	background: #1d4ed8;
+}
+
+.folder-section {
+	border-top: 1px solid #e2e8f0;
+	padding-top: 4px;
+	margin-top: 4px;
 }
 
 .folder-list {

@@ -58,7 +58,7 @@ if (!empty($tag->imap_keyword) && $message_uid) {
 
 	$client = new IMAPClient();
 	if ($client->connect($account->imap_server, $account->imap_port, $account->imap_security,
-		$account->imap_login, $account->imap_password, $folder)) {
+		$account->imap_login, $account->imap_password, $folder, $account->auth_type, $account->oauth_service)) {
 		$client->setKeyword($message_uid, $tag->imap_keyword);
 		$client->close();
 	}

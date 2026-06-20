@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	let currentFolder = 'INBOX';
 	let trashFolder = null; // detected from folder list
 	let currentIframe = null;
+	let currentAccountId = null;
 
 	// Reset the view panel to an empty state without hiding it (keeps layout stable)
 	const clearViewPanel = () => {
@@ -85,19 +86,24 @@ document.addEventListener('DOMContentLoaded', () => {
 	let emailsHasMore = false;
 	let scrollObserver = null; // IntersectionObserver for infinite scroll
 
-	// Fetch folders
-	const fetchFolders = () => {
-		fetch('../../custom/inbox/ajax/get_folders.php')
+	// Fetch folders for a given account
+	const fetchFolders = (accountId) => {
+		trashFolder = null;
+		const ul = document.getElementById('dynamic-folder-list');
+		ul.innerHTML = '<li><i class="fa fa-spin fa-spinner"></i></li>';
+
+		fetch('../../custom/inbox/ajax/get_folders.php?account_id=' + encodeURIComponent(accountId))
 			.then(response => response.json())
 			.then(data => {
-				const ul = document.getElementById('dynamic-folder-list');
 				ul.innerHTML = '';
-				
+
 				if (data.error) {
 					ul.innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> ' + data.error + '</li>';
 					return;
 				}
-				
+
+				currentFolder = 'INBOX';
+
 				data.data.forEach(f => {
 					if (f.type === 'trash' && !trashFolder) trashFolder = f.id;
 
@@ -109,40 +115,104 @@ document.addEventListener('DOMContentLoaded', () => {
 					else if (f.type == 'drafts') icon = 'fa-file';
 					else if (f.type == 'trash') icon = 'fa-trash';
 					else if (f.type == 'archive') icon = 'fa-archive';
-					
+
 					li.innerHTML = '<i class="fa ' + icon + '"></i><span class="folder-name"> ' + f.name + '</span>';
 					li.title = f.name;
 					li.dataset.id = f.id;
-					
+
 					if (f.id == currentFolder || (currentFolder == 'INBOX' && f.type == 'inbox')) {
 						li.className = 'active';
-						currentFolder = f.id; // Normalize default inbox name
+						currentFolder = f.id;
 					}
-					
+
 					li.addEventListener('click', () => {
 						document.querySelectorAll('#dynamic-folder-list li').forEach(el => el.classList.remove('active'));
 						li.classList.add('active');
 						currentFolder = f.id;
-
-						// Clear view (elements may not exist depending on current state)
-						const emptyState = document.getElementById('email-empty-state');
-						const viewContent = document.getElementById('email-view-content');
-						if (emptyState) emptyState.style.display = 'block';
-						if (viewContent) viewContent.style.display = 'none';
 						document.getElementById('reply-form-container').style.display = 'none';
-
 						fetchEmails(true, true);
 					});
 
 					ul.appendChild(li);
 				});
 
-				// Initial fetch
 				fetchEmails(true, true);
 			})
 			.catch(err => {
 				console.error("Error fetching folders:", err);
-				document.getElementById('dynamic-folder-list').innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Erreur réseau</li>';
+				ul.innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Erreur réseau</li>';
+			});
+	};
+
+	// Fetch and display the list of mailbox accounts in the sidebar
+	const fetchUnreadCounts = () => {
+		fetch('../../custom/inbox/ajax/get_unread_counts.php')
+			.then(r => r.json())
+			.then(data => {
+				if (!data.data) return;
+				Object.entries(data.data).forEach(([id, count]) => {
+					const li = document.querySelector('#dynamic-account-list li[data-id="' + id + '"]');
+					if (!li) return;
+					let badge = li.querySelector('.account-unread-badge');
+					if (count > 0) {
+						if (!badge) {
+							badge = document.createElement('span');
+							badge.className = 'badge account-unread-badge';
+							li.appendChild(badge);
+						}
+						badge.textContent = count > 99 ? '99+' : count;
+					} else if (badge) {
+						badge.remove();
+					}
+				});
+			})
+			.catch(() => {});
+	};
+
+	const fetchAccounts = () => {
+		fetch('../../custom/inbox/ajax/get_accounts.php')
+			.then(r => r.json())
+			.then(data => {
+				const ul = document.getElementById('dynamic-account-list');
+				ul.innerHTML = '';
+
+				if (data.error || !data.data || data.data.length === 0) {
+					ul.innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Aucune boîte configurée</li>';
+					return;
+				}
+
+				data.data.forEach((account, idx) => {
+					const li = document.createElement('li');
+					li.className = 'account-item';
+					li.dataset.id = account.rowid;
+					li.innerHTML = '<i class="fa fa-inbox"></i><span class="account-name"> ' + account.label + '</span>';
+					li.title = account.email;
+
+					li.addEventListener('click', () => {
+						document.querySelectorAll('#dynamic-account-list li').forEach(el => el.classList.remove('active'));
+						li.classList.add('active');
+						currentAccountId = account.rowid;
+						clearViewPanel();
+						clearEmailList();
+						fetchFolders(currentAccountId);
+					});
+
+					ul.appendChild(li);
+
+					// Auto-select first account
+					if (idx === 0) {
+						li.classList.add('active');
+						currentAccountId = account.rowid;
+						fetchFolders(currentAccountId);
+					}
+				});
+
+				// Load unread badges asynchronously after accounts are rendered
+				fetchUnreadCounts();
+			})
+			.catch(err => {
+				console.error("Error fetching accounts:", err);
+				document.getElementById('dynamic-account-list').innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Erreur réseau</li>';
 			});
 	};
 
@@ -163,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			e.currentTarget.classList.add('active');
 			if (e.currentTarget.classList.contains('unread')) {
 				e.currentTarget.classList.remove('unread');
-				const fd = new URLSearchParams({ uid: email.uid, folder: currentFolder });
+				const fd = new URLSearchParams({ uid: email.uid, folder: currentFolder, account_id: currentAccountId });
 				fetch('../../custom/inbox/ajax/mark_seen.php', { method: 'POST', body: fd }).catch(() => {});
 			}
 
@@ -218,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			loadMessageTags(email.message_id);
 			loadComments(email.uid, currentFolder, email.message_id);
 
-			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder))
+			fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + email.uid + '&folder=' + encodeURIComponent(currentFolder) + '&account_id=' + encodeURIComponent(currentAccountId))
 				.then(res => {
 					if (!res.ok) throw new Error("HTTP error " + res.status);
 					return res.json();
@@ -336,7 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 
 		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
-			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE);
+			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE)
+			+ '&account_id=' + encodeURIComponent(currentAccountId);
 
 		// Snapshot the ordered UIDs and selected UID before clearing
 		const previousUid  = currentEmail ? String(currentEmail.uid) : null;
@@ -481,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	} catch (e) {}
 
 	// Trigger fetch on load
-	fetchFolders();
+	fetchAccounts();
 
 	// Wire up the manual refresh button
 	const btnSync = document.querySelector('.inbox-panel-header .fa-sync');
@@ -496,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const replyOpen = document.getElementById('reply-form-container').style.display !== 'none';
 			if (!replyOpen) {
 				fetchEmails();
+				fetchUnreadCounts();
 			}
 		}, refreshInterval * 1000);
 	}
@@ -509,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const formData = new URLSearchParams();
 			formData.append('uid', currentEmail.uid);
 			formData.append('folder', currentFolder);
+			formData.append('account_id', currentAccountId);
 			if (trashFolder && trashFolder !== currentFolder) {
 				formData.append('trash_folder', trashFolder);
 			}
@@ -621,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			formData.append('subject', document.getElementById('reply-subject').value);
 			formData.append('body', bodyContent);
 			formData.append('in_reply_to', currentEmail.uid);
+			formData.append('account_id', currentAccountId);
 			
 			// Hide form immediately
 			document.getElementById('reply-form-container').style.display = 'none';

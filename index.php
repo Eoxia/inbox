@@ -45,9 +45,12 @@ llxHeader($head, $langs->trans($page_name));
 		<div class="inbox-panel-content">
 			<div class="mailbox-section">
 				<h3><?php echo $langs->trans('InboxMailboxes'); ?></h3>
-				<ul class="folder-list" id="dynamic-folder-list">
-					<li class="active"><i class="fa fa-spin fa-spinner"></i> Chargement...</li>
+				<ul class="account-list" id="dynamic-account-list">
+					<li><i class="fa fa-spin fa-spinner"></i> Chargement...</li>
 				</ul>
+			</div>
+			<div class="folder-section">
+				<ul class="folder-list" id="dynamic-folder-list"></ul>
 			</div>
 		</div>
 	</div>

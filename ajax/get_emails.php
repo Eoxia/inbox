@@ -39,18 +39,16 @@ if (empty($user->rights->inbox->read)) {
 
 header('Content-Type: application/json');
 
-// Find first active account for the user or shared
-$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
+$account_id = (int) GETPOST('account_id', 'int');
+if ($account_id > 0) {
+	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE rowid = ".$account_id." AND status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) LIMIT 1";
+} else {
+	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
+}
 $resql = $db->query($sql);
-
 if (!$resql || $db->num_rows($resql) == 0) {
-	// Fallback: try to find ANY active account if none specific to user (for initial testing)
-	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
-	$resql = $db->query($sql);
-	if (!$resql || $db->num_rows($resql) == 0) {
-		print json_encode(array('error' => 'No active mailbox configured.'));
-		exit;
-	}
+	print json_encode(array('error' => 'No active mailbox configured.'));
+	exit;
 }
 
 $obj = $db->fetch_object($resql);
@@ -70,7 +68,9 @@ $connected = $client->connect(
 	$account->imap_security,
 	$account->imap_login,
 	$account->imap_password,
-	$folder
+	$folder,
+	$account->auth_type,
+	$account->oauth_service
 );
 
 if (!$connected) {

@@ -48,15 +48,16 @@ if (empty($folder)) {
 	$folder = 'INBOX';
 }
 
-$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
+$account_id = (int) GETPOST('account_id', 'int');
+if ($account_id > 0) {
+	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE rowid = ".$account_id." AND status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) LIMIT 1";
+} else {
+	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
+}
 $resql = $db->query($sql);
 if (!$resql || $db->num_rows($resql) == 0) {
-	$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
-	$resql = $db->query($sql);
-	if (!$resql || $db->num_rows($resql) == 0) {
-		http_response_code(500);
-		exit('No active mailbox configured');
-	}
+	http_response_code(500);
+	exit('No active mailbox configured');
 }
 
 $obj = $db->fetch_object($resql);
@@ -70,7 +71,9 @@ $connected = $client->connect(
 	$account->imap_security,
 	$account->imap_login,
 	$account->imap_password,
-	$folder
+	$folder,
+	$account->auth_type,
+	$account->oauth_service
 );
 
 if (!$connected) {
