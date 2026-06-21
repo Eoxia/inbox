@@ -1002,6 +1002,8 @@ document.addEventListener('DOMContentLoaded', () => {
 				if (!CKEDITOR.instances.replybody) {
 					CKEDITOR.replace('replybody', {
 						toolbar: [
+							{ name: 'source',      items: ['Source'] },
+							{ name: 'styles',      items: ['Format'] },
 							{ name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat'] },
 							{ name: 'lists',       items: ['NumberedList', 'BulletedList'] },
 							{ name: 'links',       items: ['Link', 'Unlink'] },
