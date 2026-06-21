@@ -71,7 +71,31 @@ InboxImapKeywordHelp=ASCII keyword without spaces — synced to the mail server 
 InboxNoTagDefined=No tags defined.
 InboxConfirmDeleteTag=Delete this tag?
 
-# Main interface
+# Main interface — strings injected into JS via window.inboxLangs
+InboxJustNow=Just now
+InboxYesterday=Yesterday
+InboxNetworkError=Network error
+InboxMarkUnread=Mark as unread
+InboxMarkRead=Mark as read
+InboxMoveToTrash=Move to trash
+InboxBodyLoadError=Error loading message body:
+InboxBodyNetworkError=Network error while loading message body
+InboxNoEmailFound=No emails found.
+InboxSyncNetworkError=Network error while synchronizing.
+InboxExpandSidebar=Expand sidebar
+InboxCollapseSidebar=Collapse sidebar
+InboxSimpleListView=Simple list view
+InboxThreadedView=Threaded view
+InboxWroteOn=On %date%, %from% wrote:
+InboxSendCancelled=Send cancelled.
+InboxSendError=Error sending message:
+InboxSendSuccess=Message sent successfully!
+InboxSending=Sending...
+InboxSendingIn=Email will be sent in %s seconds...
+InboxRemoveTag=Remove tag
+InboxDelete=Delete
+InboxLoading=Loading...
+
 InboxNewMessage=New message
 InboxMailboxes=Mailboxes
 InboxSearchPlaceholder=Search...

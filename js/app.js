@@ -36,23 +36,25 @@ document.addEventListener('DOMContentLoaded', () => {
 		const diffMin = Math.floor(diffMs / 60000);
 		const diffH   = Math.floor(diffMs / 3600000);
 
-		if (diffMin < 1)  return 'À l\'instant';
+		const loc = (typeof inboxLangs !== 'undefined') ? inboxLangs.locale : undefined;
+		if (diffMin < 1)  return (typeof inboxLangs !== 'undefined') ? inboxLangs.JustNow : 'Just now';
 		if (diffMin < 60) return `${diffMin} min`;
 		// Same calendar day
 		if (date.toDateString() === now.toDateString()) {
-			return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+			return date.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 		}
 		// Yesterday
 		const yest = new Date(now); yest.setDate(yest.getDate() - 1);
 		if (date.toDateString() === yest.toDateString()) {
-			return 'Hier ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+			const t = (typeof inboxLangs !== 'undefined') ? inboxLangs.Yesterday : 'Yesterday';
+			return t + ' ' + date.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 		}
 		// Same year
 		if (date.getFullYear() === now.getFullYear()) {
-			return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+			return date.toLocaleDateString(loc, { day: 'numeric', month: 'short' });
 		}
 		// Older
-		return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+		return date.toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' });
 	};
 
 	// Full date for the view panel header
@@ -60,9 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (!dateStr) return '';
 		const date = new Date(dateStr.replace(' ', 'T'));
 		if (isNaN(date)) return dateStr;
-		return date.toLocaleDateString('fr-FR', {
-			weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-		}) + ' à ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+		const loc = (typeof inboxLangs !== 'undefined') ? inboxLangs.locale : undefined;
+		return date.toLocaleString(loc, {
+			weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+			hour: '2-digit', minute: '2-digit',
+		});
 	};
 
 	const renderRecipients = (str) => {
@@ -182,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			})
 			.catch(err => {
 				console.error("Error fetching folders:", err);
-				ul.innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Erreur réseau</li>';
+				ul.innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> ' + inboxLangs.NetworkError + '</li>';
 			});
 	};
 
@@ -254,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			})
 			.catch(err => {
 				console.error("Error fetching accounts:", err);
-				document.getElementById('dynamic-account-list').innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> Erreur réseau</li>';
+				document.getElementById('dynamic-account-list').innerHTML = '<li><i class="fa fa-exclamation-triangle"></i> ' + inboxLangs.NetworkError + '</li>';
 			});
 	};
 
@@ -270,10 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
 			</div>
 			<div class="email-subject">${email.subject}</div>
 			<div class="email-item-actions">
-				<button class="email-action-btn btn-item-seen" title="${email.seen ? 'Marquer non lu' : 'Marquer lu'}">
+				<button class="email-action-btn btn-item-seen" title="${email.seen ? inboxLangs.MarkUnread : inboxLangs.MarkRead}">
 					<i class="fa ${email.seen ? 'fa-envelope' : 'fa-envelope-open'}"></i>
 				</button>
-				<button class="email-action-btn btn-item-trash" title="Mettre à la corbeille">
+				<button class="email-action-btn btn-item-trash" title="${inboxLangs.MoveToTrash}">
 					<i class="fa fa-trash"></i>
 				</button>
 			</div>
@@ -287,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const btn = e.currentTarget;
 			const icon = btn.querySelector('i');
 			icon.className = isUnread ? 'fa fa-envelope' : 'fa fa-envelope-open';
-			btn.title = isUnread ? 'Marquer non lu' : 'Marquer lu';
+			btn.title = isUnread ? inboxLangs.MarkUnread : inboxLangs.MarkRead;
 			const fd = new URLSearchParams({ uid: email.uid, folder: currentFolder, account_id: currentAccountId, seen: isUnread ? 1 : 0 });
 			fetch('../../custom/inbox/ajax/mark_seen.php', { method: 'POST', body: fd })
 				.then(() => fetchUnreadCounts())
@@ -364,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 
 			const bodyContainer = document.querySelector('.email-view-body');
-			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>Chargement...</div>';
+			bodyContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;"><i class="fa fa-spinner fa-spin fa-2x"></i><br>' + inboxLangs.Loading + '</div>';
 
 			// Clear previous attachment list, tags and comments
 			const existingAttachBar = document.getElementById('email-attachment-bar');
@@ -381,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				})
 				.then(bodyData => {
 					if (bodyData.error) {
-						bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur lors du chargement du corps: ' + bodyData.error + '</div>';
+						bodyContainer.innerHTML = '<div style="color:red; padding:20px;">' + inboxLangs.BodyLoadError + ' ' + escHtml(bodyData.error) + '</div>';
 						currentEmailBody = '';
 					} else {
 						currentEmailBody = bodyData.body;
@@ -442,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				})
 				.catch(err => {
 					console.error("Fetch body error:", err);
-					bodyContainer.innerHTML = '<div style="color:red; padding:20px;">Erreur réseau lors du chargement du corps. (Voir console)</div>';
+					bodyContainer.innerHTML = '<div style="color:red; padding:20px;">' + inboxLangs.BodyNetworkError + '</div>';
 				});
 		});
 		return el;
@@ -473,7 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			</div>
 			<div class="email-subject">${thread.subject} ${countBadge}</div>
 			<div class="email-item-actions">
-				<button class="email-action-btn btn-item-trash" title="Mettre à la corbeille">
+				<button class="email-action-btn btn-item-trash" title="${inboxLangs.MoveToTrash}">
 					<i class="fa fa-trash"></i>
 				</button>
 			</div>
@@ -659,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				}
 			})
 			.catch(() => {
-				bodyEl.innerHTML = '<div style="color:red;padding:10px;">Erreur réseau</div>';
+				bodyEl.innerHTML = '<div style="color:red;padding:10px;">' + inboxLangs.NetworkError + '</div>';
 			});
 	};
 
@@ -705,7 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const loader = document.createElement('div');
 			loader.id = 'email-page-loader';
 			loader.style.cssText = 'padding: 12px; text-align: center; color: #64748b; font-size: 0.9em;';
-			loader.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+			loader.innerHTML = '<i class="fa fa-spinner fa-spin"></i> ' + inboxLangs.Loading;
 			container.insertBefore(loader, sentinel);
 		}
 
@@ -752,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					} else {
 						const emptyDiv = document.createElement('div');
 						emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
-						emptyDiv.textContent = 'Aucun email trouvé.';
+						emptyDiv.textContent = inboxLangs.NoEmailFound;
 						container.insertBefore(emptyDiv, sentinel);
 					}
 				} else if (reset && !folderSwitch) {
@@ -775,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					} else if (existingMap.size === 0) {
 						const emptyDiv = document.createElement('div');
 						emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
-						emptyDiv.textContent = 'Aucun email trouvé.';
+						emptyDiv.textContent = inboxLangs.NoEmailFound;
 						container.insertBefore(emptyDiv, sentinel);
 					}
 				} else {
@@ -837,7 +841,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					clearEmailList();
 					const errDiv = document.createElement('div');
 					errDiv.style.cssText = 'padding: 20px; color: red;';
-					errDiv.textContent = 'Erreur réseau lors de la synchronisation.';
+					errDiv.textContent = inboxLangs.SyncNetworkError;
 					container.insertBefore(errDiv, sentinel);
 				}
 				console.error(err);
@@ -869,11 +873,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (collapsed) {
 			sidebarEl.classList.add('collapsed');
 			if (toggleIcon) { toggleIcon.classList.replace('fa-chevron-left', 'fa-chevron-right'); }
-			if (toggleBtn)  toggleBtn.title = 'Agrandir la barre latérale';
+			if (toggleBtn)  toggleBtn.title = inboxLangs.ExpandSidebar;
 		} else {
 			sidebarEl.classList.remove('collapsed');
 			if (toggleIcon) { toggleIcon.classList.replace('fa-chevron-right', 'fa-chevron-left'); }
-			if (toggleBtn)  toggleBtn.title = 'Réduire la barre latérale';
+			if (toggleBtn)  toggleBtn.title = inboxLangs.CollapseSidebar;
 		}
 		try { localStorage.setItem('inbox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
 	};
@@ -904,7 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			btnToggleThread.classList.toggle('active', threadedView);
 			const icon = btnToggleThread.querySelector('i');
 			icon.className = threadedView ? 'fa fa-list' : 'fa fa-comments-o';
-			btnToggleThread.title = threadedView ? 'Vue liste simple' : 'Vue par fils de discussion';
+			btnToggleThread.title = threadedView ? inboxLangs.SimpleListView : inboxLangs.ThreadedView;
 			clearViewPanel();
 			fetchEmails(true, true); // Force full rebuild for view mode switch
 		});
@@ -1015,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				
 				// Set initial content (blockquote)
 				const blockquote = `<br><br><blockquote style="border-left: 2px solid #ccc; margin-left: 10px; padding-left: 10px; color: #666;">
-					<p>Le ${formatDateFull(currentEmail.date)}, ${currentEmail.from} a écrit :</p>
+					<p>${inboxLangs.WroteOn.replace('%date%', formatDateFull(currentEmail.date)).replace('%from%', escHtml(currentEmail.from))}</p>
 					${currentEmailBody}
 				</blockquote><p><br></p>`;
 				
@@ -1083,8 +1087,8 @@ document.addEventListener('DOMContentLoaded', () => {
 			
 			const updateBannerContent = () => {
 				banner.innerHTML = `
-					<span><i class="fa fa-clock-o"></i> L'email sera envoyé dans <strong>${timeLeft}</strong> secondes...</span>
-					<button id="btn-abort-send" class="button" style="padding: 5px 10px; background: white; border: 1px solid #ccc; cursor: pointer;">Annuler l'envoi</button>
+					<span><i class="fa fa-clock-o"></i> ${inboxLangs.SendingIn.replace('%s', `<strong>${timeLeft}</strong>`)}</span>
+					<button id="btn-abort-send" class="button" style="padding: 5px 10px; background: white; border: 1px solid #ccc; cursor: pointer;">${escHtml(inboxLangs.CancelSend)}</button>
 				`;
 				
 				document.getElementById('btn-abort-send').addEventListener('click', () => {
@@ -1093,9 +1097,9 @@ document.addEventListener('DOMContentLoaded', () => {
 					banner.style.display = 'none';
 					document.getElementById('reply-form-container').style.display = 'block';
 					if (typeof $ !== 'undefined' && $.jnotify) {
-						$.jnotify("Envoi annulé.", "warning");
+						$.jnotify(inboxLangs.SendCancelled, "warning");
 					} else {
-						console.log("Envoi annulé.");
+						console.log(inboxLangs.SendCancelled);
 					}
 				});
 			};
@@ -1114,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			
 			// Actually send after delay
 			sendTimeout = setTimeout(() => {
-				banner.innerHTML = `<span><i class="fa fa-spinner fa-spin"></i> Expédition en cours...</span>`;
+				banner.innerHTML = `<span><i class="fa fa-spinner fa-spin"></i> ${escHtml(inboxLangs.Sending)}</span>`;
 				
 				fetch('../../custom/inbox/ajax/send_email.php', {
 					method: 'POST',
@@ -1125,15 +1129,15 @@ document.addEventListener('DOMContentLoaded', () => {
 					banner.style.display = 'none';
 					if (data.error) {
 						if (typeof $ !== 'undefined' && $.jnotify) {
-							$.jnotify("Erreur lors de l'envoi : " + data.error, "error");
+							$.jnotify(inboxLangs.SendError + ' ' + data.error, "error");
 						} else {
-							alert("Erreur lors de l'envoi : " + data.error);
+							alert(inboxLangs.SendError + ' ' + data.error);
 						}
 					} else {
 						if (typeof $ !== 'undefined' && $.jnotify) {
-							$.jnotify("Message envoyé avec succès !", "success");
+							$.jnotify(inboxLangs.SendSuccess, "success");
 						} else {
-							alert("Message envoyé avec succès !");
+							alert(inboxLangs.SendSuccess);
 						}
 					}
 				})
@@ -1141,9 +1145,9 @@ document.addEventListener('DOMContentLoaded', () => {
 					banner.style.display = 'none';
 					document.getElementById('reply-form-container').style.display = 'block';
 					if (typeof $ !== 'undefined' && $.jnotify) {
-						$.jnotify("Erreur réseau.", "error");
+						$.jnotify(inboxLangs.NetworkError, "error");
 					} else {
-						alert("Erreur réseau.");
+						alert(inboxLangs.NetworkError);
 					}
 					console.error(err);
 				});
@@ -1174,7 +1178,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			chip.className = 'tag tag-dynamic';
 			chip.dataset.tagId = t.fk_tag;
 			chip.style.background = t.tag_color || '#3b82f6';
-			chip.innerHTML = `${escHtml(t.tag_label)}<button class="tag-remove" title="Retirer ce tag" aria-label="Retirer">&#x2715;</button>`;
+			chip.innerHTML = `${escHtml(t.tag_label)}<button class="tag-remove" title="${escHtml(inboxLangs.RemoveTag)}" aria-label="${escHtml(inboxLangs.RemoveTag)}">&#x2715;</button>`;
 			chip.querySelector('.tag-remove').addEventListener('click', (e) => {
 				e.stopPropagation();
 				removeMessageTag(t.fk_tag, chip);
@@ -1250,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				chip.className = 'tag tag-dynamic';
 				chip.dataset.tagId = tag.rowid;
 				chip.style.background = tag.color || '#3b82f6';
-				chip.innerHTML = `${escHtml(tag.label)}<button class="tag-remove" title="Retirer ce tag" aria-label="Retirer">&#x2715;</button>`;
+				chip.innerHTML = `${escHtml(tag.label)}<button class="tag-remove" title="${escHtml(inboxLangs.RemoveTag)}" aria-label="${escHtml(inboxLangs.RemoveTag)}">&#x2715;</button>`;
 				chip.querySelector('.tag-remove').addEventListener('click', (e) => {
 					e.stopPropagation();
 					removeMessageTag(tag.rowid, chip);
@@ -1327,7 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				<div class="comment-meta">
 					<span class="comment-author">${c.author}</span>
 					<span class="comment-date">${c.date}</span>
-					${c.is_mine ? '<button class="btn-delete-comment" style="margin-left:8px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:0.8em;" title="Supprimer"><i class="fa fa-times"></i></button>' : ''}
+					${c.is_mine ? `<button class="btn-delete-comment" style="margin-left:8px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:0.8em;" title="${escHtml(inboxLangs.Delete)}"><i class="fa fa-times"></i></button>` : ''}
 				</div>
 				<div class="comment-text">${c.comment.replace(/\n/g, '<br>')}</div>
 			</div>
@@ -1352,7 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	const loadComments = (uid, folder, message_id) => {
 		if (!commentsList) return;
-		commentsList.innerHTML = '<div style="color:#94a3b8;font-size:0.85em;padding:8px 0;">Chargement...</div>';
+		commentsList.innerHTML = '<div style="color:#94a3b8;font-size:0.85em;padding:8px 0;">' + inboxLangs.Loading + '</div>';
 		const url = '../../custom/inbox/ajax/get_comments.php?uid=' + encodeURIComponent(uid)
 			+ '&folder=' + encodeURIComponent(folder)
 			+ (message_id ? '&message_id=' + encodeURIComponent(message_id) : '');

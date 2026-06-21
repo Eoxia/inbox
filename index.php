@@ -40,13 +40,13 @@ llxHeader($head, $langs->trans($page_name));
 	<div class="inbox-panel inbox-sidebar" id="panel-folders">
 		<div class="inbox-panel-header">
 			<button class="btn-new-message"><i class="fa fa-edit"></i><span class="btn-label"> <?php echo $langs->trans('InboxNewMessage'); ?></span></button>
-			<button class="btn-sidebar-toggle btn-icon" id="btn-sidebar-toggle" title="Réduire la barre latérale"><i class="fa fa-chevron-left"></i></button>
+			<button class="btn-sidebar-toggle btn-icon" id="btn-sidebar-toggle" title="<?php echo dol_escape_htmltag($langs->trans('InboxCollapseSidebar')); ?>"><i class="fa fa-chevron-left"></i></button>
 		</div>
 		<div class="inbox-panel-content">
 			<div class="mailbox-section">
 				<h3><?php echo $langs->trans('InboxMailboxes'); ?></h3>
 				<ul class="account-list" id="dynamic-account-list">
-					<li><i class="fa fa-spin fa-spinner"></i> Chargement...</li>
+					<li><i class="fa fa-spin fa-spinner"></i> <?php echo $langs->trans('InboxLoading'); ?></li>
 				</ul>
 			</div>
 			<div class="folder-section">
@@ -59,7 +59,7 @@ llxHeader($head, $langs->trans($page_name));
 	<div class="inbox-panel inbox-list" id="panel-list">
 		<div class="inbox-panel-header">
 			<input type="text" placeholder="<?php echo dol_escape_htmltag($langs->trans('InboxSearchPlaceholder')); ?>" class="inbox-search">
-			<button class="btn-sidebar-toggle" id="btn-toggle-thread" title="Vue par fils de discussion"><i class="fa fa-comments-o"></i></button>
+			<button class="btn-sidebar-toggle" id="btn-toggle-thread" title="<?php echo dol_escape_htmltag($langs->trans('InboxThreadedView')); ?>"><i class="fa fa-comments-o"></i></button>
 			<button class="btn-sidebar-toggle"><i class="fa fa-sync"></i></button>
 		</div>
 		<div class="inbox-panel-content" id="email-list-container">
@@ -159,8 +159,35 @@ llxHeader($head, $langs->trans($page_name));
 </div>
 
 <script>
-	var inboxSendDelay = <?php echo getDolGlobalInt('INBOX_SEND_DELAY', 10); ?>;
+	var inboxSendDelay       = <?php echo getDolGlobalInt('INBOX_SEND_DELAY', 10); ?>;
 	var inboxRefreshInterval = <?php echo getDolGlobalInt('INBOX_REFRESH_INTERVAL', 0); ?>;
+	var inboxLangs = {
+		locale:            <?php echo json_encode(str_replace('_', '-', $langs->defaultlang)); ?>,
+		JustNow:           <?php echo json_encode($langs->transnoentitiesnoconv('InboxJustNow')); ?>,
+		Yesterday:         <?php echo json_encode($langs->transnoentitiesnoconv('InboxYesterday')); ?>,
+		NetworkError:      <?php echo json_encode($langs->transnoentitiesnoconv('InboxNetworkError')); ?>,
+		MarkUnread:        <?php echo json_encode($langs->transnoentitiesnoconv('InboxMarkUnread')); ?>,
+		MarkRead:          <?php echo json_encode($langs->transnoentitiesnoconv('InboxMarkRead')); ?>,
+		MoveToTrash:       <?php echo json_encode($langs->transnoentitiesnoconv('InboxMoveToTrash')); ?>,
+		BodyLoadError:     <?php echo json_encode($langs->transnoentitiesnoconv('InboxBodyLoadError')); ?>,
+		BodyNetworkError:  <?php echo json_encode($langs->transnoentitiesnoconv('InboxBodyNetworkError')); ?>,
+		NoEmailFound:      <?php echo json_encode($langs->transnoentitiesnoconv('InboxNoEmailFound')); ?>,
+		SyncNetworkError:  <?php echo json_encode($langs->transnoentitiesnoconv('InboxSyncNetworkError')); ?>,
+		ExpandSidebar:     <?php echo json_encode($langs->transnoentitiesnoconv('InboxExpandSidebar')); ?>,
+		CollapseSidebar:   <?php echo json_encode($langs->transnoentitiesnoconv('InboxCollapseSidebar')); ?>,
+		SimpleListView:    <?php echo json_encode($langs->transnoentitiesnoconv('InboxSimpleListView')); ?>,
+		ThreadedView:      <?php echo json_encode($langs->transnoentitiesnoconv('InboxThreadedView')); ?>,
+		WroteOn:           <?php echo json_encode($langs->transnoentitiesnoconv('InboxWroteOn')); ?>,
+		CancelSend:        <?php echo json_encode($langs->transnoentitiesnoconv('InboxCancelSend')); ?>,
+		SendCancelled:     <?php echo json_encode($langs->transnoentitiesnoconv('InboxSendCancelled')); ?>,
+		SendError:         <?php echo json_encode($langs->transnoentitiesnoconv('InboxSendError')); ?>,
+		SendSuccess:       <?php echo json_encode($langs->transnoentitiesnoconv('InboxSendSuccess')); ?>,
+		Sending:           <?php echo json_encode($langs->transnoentitiesnoconv('InboxSending')); ?>,
+		SendingIn:         <?php echo json_encode($langs->transnoentitiesnoconv('InboxSendingIn')); ?>,
+		RemoveTag:         <?php echo json_encode($langs->transnoentitiesnoconv('InboxRemoveTag')); ?>,
+		Delete:            <?php echo json_encode($langs->transnoentitiesnoconv('InboxDelete')); ?>,
+		Loading:           <?php echo json_encode($langs->transnoentitiesnoconv('InboxLoading')); ?>,
+	};
 </script>
 <?php
 llxFooter();
