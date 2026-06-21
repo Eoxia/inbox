@@ -303,16 +303,25 @@
 	transform: translateY(-50%);
 	gap: 4px;
 	align-items: center;
-	background: linear-gradient(to right, transparent, var(--panel-bg) 25%);
 	padding-left: 20px;
 }
 
 .email-item:hover .email-item-actions {
 	display: flex;
+	background: linear-gradient(to right, transparent, var(--hover-bg) 25%);
+}
+
+.email-item.active .email-item-actions {
+	background: linear-gradient(to right, transparent, var(--active-bg) 25%);
 }
 
 .email-action-btn {
-	background: white;
+	-webkit-appearance: none;
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--panel-bg);
 	border: 1px solid var(--border-color);
 	border-radius: 4px;
 	color: var(--text-secondary);
@@ -662,6 +671,131 @@
 	padding: 8px 15px;
 	border-radius: 4px;
 	cursor: pointer;
+}
+
+/* ── Thread list rows ───────────────────────────────────── */
+
+.thread-item .thread-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: #e2e8f0;
+	color: #64748b;
+	border-radius: 10px;
+	font-size: 0.75em;
+	padding: 1px 6px;
+	margin-left: 4px;
+	font-weight: 500;
+}
+
+.thread-item .thread-unread-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--primary-color);
+	color: #fff;
+	border-radius: 10px;
+	font-size: 0.72em;
+	padding: 1px 5px;
+	margin-left: 4px;
+	font-weight: 600;
+}
+
+/* ── Conversation (thread) view ─────────────────────────── */
+
+.conversation-view {
+	padding: 0 !important;
+	display: flex;
+	flex-direction: column;
+}
+
+.conversation-card {
+	border-bottom: 1px solid var(--border-color);
+	background: #fff;
+}
+
+.conversation-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 20px;
+	cursor: pointer;
+	user-select: none;
+	gap: 12px;
+}
+
+.conversation-card-header:hover {
+	background: #f8fafc;
+}
+
+.conversation-card.expanded > .conversation-card-header {
+	border-bottom: 1px solid var(--border-color);
+}
+
+.card-sender {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.card-avatar {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: var(--primary-color);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75em;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.card-from {
+	font-size: 0.9em;
+	font-weight: 500;
+	color: var(--text-primary);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.card-unread-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--primary-color);
+	display: inline-block;
+	flex-shrink: 0;
+}
+
+.card-date {
+	font-size: 0.78em;
+	color: var(--text-secondary);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.conversation-card-body {
+	padding: 0 20px 16px;
+}
+
+.conversation-card.collapsed > .conversation-card-body {
+	display: none;
+}
+
+/* Toggle button active state */
+#btn-toggle-thread.active {
+	background: var(--primary-color);
+	color: #fff;
+	border-color: var(--primary-color);
+}
+
+#btn-toggle-thread.active:hover {
+	background: #172554;
+	border-color: #172554;
 }
 
 /* Remote images warning banner */

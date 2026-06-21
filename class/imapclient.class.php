@@ -276,6 +276,152 @@ class IMAPClient
 	}
 
 	/**
+	 * Return a paginated list of threaded conversations (IMAP THREAD command).
+	 *
+	 * Each returned item represents a thread: subject + participants from all messages,
+	 * seen=0 if any message is unread, date = latest message date.
+	 * The 'messages' array contains per-message metadata (no bodies) sorted oldest-first.
+	 *
+	 * @param int $limit_days  Only include messages newer than this many days
+	 * @param int $offset      Zero-based thread offset for pagination
+	 * @param int $page_size   Number of threads per page
+	 * @return array|false  ['messages' => stdClass[], 'total' => int, 'has_more' => bool]
+	 */
+	public function getThreadedMessages($limit_days = 180, $offset = 0, $page_size = 50)
+	{
+		if (!$this->client) {
+			$this->error = 'Not connected';
+			return false;
+		}
+
+		try {
+			$since = new DateTime('-'.$limit_days.' days');
+			$query = new Horde_Imap_Client_Search_Query();
+			$query->dateSearch($since, Horde_Imap_Client_Search_Query::DATE_SINCE);
+			$query->flag('\Deleted', false);
+
+			// Try THREAD REFERENCES (accurate), fall back to ORDEREDSUBJECT (universal)
+			try {
+				$threadResult = $this->client->thread($this->mailbox, [
+					'algorithm' => Horde_Imap_Client::THREAD_REFERENCES,
+					'search'    => $query,
+				]);
+			} catch (Horde_Imap_Client_Exception $e) {
+				$threadResult = $this->client->thread($this->mailbox, [
+					'algorithm' => Horde_Imap_Client::THREAD_ORDEREDSUBJECT,
+					'search'    => $query,
+				]);
+			}
+
+			// Build groups of UIDs per thread; sort by newest UID descending
+			$threadGroups = [];
+			foreach ($threadResult->getThreads() as $thread) {
+				$uids = array_keys($thread);
+				if (empty($uids)) continue;
+				$threadGroups[] = ['uids' => $uids, 'latest_uid' => max($uids)];
+			}
+			usort($threadGroups, static function ($a, $b) { return $b['latest_uid'] - $a['latest_uid']; });
+
+			$total       = count($threadGroups);
+			$has_more    = ($offset + $page_size) < $total;
+			$pageThreads = array_slice($threadGroups, $offset, $page_size);
+
+			// Collect all UIDs needed for this page in one fetch
+			$allPageUids = [];
+			foreach ($pageThreads as $tg) {
+				foreach ($tg['uids'] as $uid) $allPageUids[] = $uid;
+			}
+
+			if (empty($allPageUids)) {
+				return ['messages' => [], 'total' => $total, 'has_more' => $has_more];
+			}
+
+			$fetchQuery = new Horde_Imap_Client_Fetch_Query();
+			$fetchQuery->envelope();
+			$fetchQuery->flags();
+			$fetchQuery->uid();
+
+			$fetchResult = $this->client->fetch($this->mailbox, $fetchQuery, [
+				'ids' => new Horde_Imap_Client_Ids($allPageUids),
+			]);
+
+			$systemFlags = ['\\seen', '\\answered', '\\deleted', '\\flagged', '\\draft', '\\recent'];
+			$msgByUid    = [];
+
+			foreach ($fetchResult as $data) {
+				$uid      = $data->getUid();
+				$envelope = $data->getEnvelope();
+				$flags    = array_map('strtolower', $data->getFlags());
+
+				$item             = new stdClass();
+				$item->uid        = $uid;
+				$item->message_id = $envelope->message_id ? trim($envelope->message_id) : '';
+				$item->subject    = $envelope->subject ?: '(No Subject)';
+				$item->date       = $envelope->date ? $envelope->date->format('Y-m-d H:i:s') : '';
+				$item->seen       = in_array('\\seen', $flags) ? 1 : 0;
+				$item->answered   = in_array('\\answered', $flags) ? 1 : 0;
+				$item->deleted    = 0;
+				$item->from       = $this->formatAddress($envelope->from);
+				$item->to         = $this->formatAddress($envelope->to);
+				$item->cc         = $this->formatAddress($envelope->cc);
+				$keywords         = array_diff($flags, $systemFlags);
+				$item->keywords   = implode(' ', $keywords);
+
+				$msgByUid[$uid] = $item;
+			}
+
+			$threads = [];
+			foreach ($pageThreads as $tg) {
+				$latestMsg = $msgByUid[$tg['latest_uid']] ?? null;
+				if (!$latestMsg) continue;
+
+				$thread             = new stdClass();
+				$thread->uid        = $tg['latest_uid'];
+				$thread->is_thread  = true;
+				$thread->subject    = $latestMsg->subject;
+				$thread->date       = $latestMsg->date;
+				$thread->message_id = $latestMsg->message_id;
+				$thread->to         = $latestMsg->to;
+
+				// Aggregate read state and participants from all messages in thread
+				$unseenCount      = 0;
+				$participants     = [];
+				$seenParticipants = [];
+				$msgs             = [];
+
+				foreach ($tg['uids'] as $uid) {
+					if (!isset($msgByUid[$uid])) continue;
+					$msg = $msgByUid[$uid];
+					if (!$msg->seen) $unseenCount++;
+					if (!empty($msg->from) && !in_array($msg->from, $seenParticipants)) {
+						$participants[]     = $msg->from;
+						$seenParticipants[] = $msg->from;
+					}
+					$msgs[] = $msg;
+				}
+
+				// Sort messages oldest-first for conversation display
+				usort($msgs, static function ($a, $b) { return strcmp($a->date, $b->date); });
+
+				$thread->unseen_count = $unseenCount;
+				$thread->seen         = ($unseenCount === 0) ? 1 : 0;
+				$thread->participants = $participants;
+				$thread->from         = implode(', ', $participants);
+				$thread->count        = count($msgs);
+				$thread->messages     = $msgs;
+
+				$threads[] = $thread;
+			}
+
+			return ['messages' => $threads, 'total' => $total, 'has_more' => $has_more];
+
+		} catch (Horde_Imap_Client_Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
 	 * Return the decoded body of a message, preferring HTML over plain text.
 	 *
 	 * @param int $uid  Message UID

@@ -59,7 +59,8 @@ llxHeader($head, $langs->trans($page_name));
 	<div class="inbox-panel inbox-list" id="panel-list">
 		<div class="inbox-panel-header">
 			<input type="text" placeholder="<?php echo dol_escape_htmltag($langs->trans('InboxSearchPlaceholder')); ?>" class="inbox-search">
-			<button class="btn-icon"><i class="fa fa-sync"></i></button>
+			<button class="btn-sidebar-toggle" id="btn-toggle-thread" title="Vue par fils de discussion"><i class="fa fa-comments-o"></i></button>
+			<button class="btn-sidebar-toggle"><i class="fa fa-sync"></i></button>
 		</div>
 		<div class="inbox-panel-content" id="email-list-container">
 			<!-- Email items injected via JS -->

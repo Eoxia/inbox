@@ -19,12 +19,12 @@ function adminInboxPrepareHead()
 	$h = 0;
 	$head = array();
 
-	$head[$h][0] = dol_buildpath('/inbox/admin/setup.php', 1);
+	$head[$h][0] = dolBuildurl(dol_buildpath('/inbox/admin/setup.php', 1));
 	$head[$h][1] = $langs->trans("InboxAccounts");
 	$head[$h][2] = 'accounts';
 	$h++;
 
-	$head[$h][0] = dol_buildpath('/inbox/admin/tags.php', 1);
+	$head[$h][0] = dolBuildurl(dol_buildpath('/inbox/admin/tags.php', 1));
 	$head[$h][1] = $langs->trans("InboxTags");
 	$head[$h][2] = 'tags';
 	$h++;
