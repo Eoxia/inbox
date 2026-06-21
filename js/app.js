@@ -1177,7 +1177,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	const loadMessageTags = (message_id) => {
 		if (!message_id) { renderViewTags([]); return; }
-		fetch('../../custom/inbox/ajax/get_message_tags.php?message_id=' + encodeURIComponent(message_id))
+		fetch('../../custom/inbox/ajax/get_message_tags.php?message_id=' + encodeURIComponent(message_id) + '&account_id=' + encodeURIComponent(currentAccountId))
 			.then(r => r.json())
 			.then(data => renderViewTags(data.data || []))
 			.catch(() => renderViewTags([]));
