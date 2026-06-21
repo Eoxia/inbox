@@ -1000,7 +1000,15 @@ document.addEventListener('DOMContentLoaded', () => {
 			// Initialize CKEditor if not already done
 			if (typeof CKEDITOR !== 'undefined') {
 				if (!CKEDITOR.instances.replybody) {
-					CKEDITOR.replace('replybody');
+					CKEDITOR.replace('replybody', {
+						toolbar: [
+							{ name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', 'RemoveFormat'] },
+							{ name: 'lists',       items: ['NumberedList', 'BulletedList'] },
+							{ name: 'links',       items: ['Link', 'Unlink'] },
+						],
+						removePlugins: 'elementspath',
+						resize_enabled: false,
+					});
 				}
 				
 				// Set initial content (blockquote)
