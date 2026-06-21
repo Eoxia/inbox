@@ -131,36 +131,25 @@ Les comptes WhatsApp reçoivent les messages via un webhook Meta (modèle push) 
 3. Générez un **System User Token** (permanent) avec la permission `whatsapp_business_messaging`.
 4. Notez le **Phone Number ID** depuis la page WhatsApp → Getting Started.
 
-#### 2 — Insérer un compte dans Dolibarr
+#### 2 — Créer un compte WhatsApp dans Dolibarr
 
-En attendant que l'interface admin supporte WhatsApp, insérez directement en base de données :
+Allez dans **Accueil → Configuration → Modules → Inbox**, cliquez sur **Ajouter un compte**, puis sélectionnez **WhatsApp Business Cloud API** comme type de provider.
 
-```sql
-INSERT INTO llx_inbox_account
-    (label, email, provider_type, config, status, date_creation)
-VALUES (
-    'WhatsApp Business',
-    'wa:+33600000000',
-    'whatsapp',
-    '{"phone_number_id":"123456789","access_token":"EAAxx...","verify_token":"monSecret123"}',
-    1,
-    NOW()
-);
-```
-
-| Clé config | Description |
+| Champ | Description |
 |---|---|
-| `phone_number_id` | Phone Number ID issu de la Meta Developer Console |
-| `access_token` | Jeton permanent du System User |
-| `verify_token` | Secret arbitraire pour vérifier le webhook |
-| `api_version` | Optionnel — version de l'API Graph, défaut `v20.0` |
+| Libellé | Nom affiché dans la barre latérale |
+| Phone Number ID | Phone Number ID issu de la Meta Developer Console (WhatsApp → Getting Started) |
+| Jeton d'accès | Jeton permanent du System User avec la permission `whatsapp_business_messaging` |
+| Verify Token | Secret arbitraire de votre choix — doit correspondre à ce que vous entrez dans la configuration webhook Meta |
+| Version API | Optionnel — version de l'API Graph, défaut `v20.0` |
+
+Enregistrez le compte. L'URL du webhook est affichée sur le formulaire d'édition une fois le compte sauvegardé.
 
 #### 3 — Configurer le webhook Meta
 
 Dans Meta Developer Console → WhatsApp → Configuration :
 
-- **Callback URL** : `https://votre-domaine/custom/inbox/ajax/whatsapp_webhook.php?account_id=N`  
-  (remplacez `N` par le `rowid` du compte inséré ci-dessus)
+- **Callback URL** : l'URL du webhook affichée sur le formulaire d'édition du compte (format : `https://votre-domaine/custom/inbox/ajax/whatsapp_webhook.php?account_id=N`)
 - **Verify Token** : la valeur de `verify_token` du config JSON
 - **Webhook fields** : souscrivez à `messages`
 
@@ -170,13 +159,17 @@ Envoyez un message WhatsApp à votre numéro professionnel. Il devrait apparaît
 
 ### Tags
 
-Allez dans l'onglet **Tags** de la page de configuration Inbox. Les tags sont définis globalement par un administrateur et peuvent être assignés à n'importe quel message.
+Allez dans l'onglet **Tags** de la page de configuration Inbox. Les tags sont des définitions globales (portée entité Dolibarr) — ils ne sont pas liés à un compte spécifique et sont disponibles pour tous les comptes.
 
 | Champ | Description |
 |---|---|
 | Libellé | Nom d'affichage du tag |
 | Couleur | Code couleur hexadécimal (utilisé pour le badge dans l'interface) |
 | Keyword IMAP | Mot-clé ASCII optionnel stocké sur le serveur IMAP (ignoré pour WhatsApp) |
+
+Les *assignations* de tags (quel tag est sur quel message) sont stockées par compte dans `llx_inbox_message_tag`.
+
+> **Compatibilité de la synchronisation keyword IMAP :** les keywords IMAP sont ignorés silencieusement pour les comptes WhatsApp. Gmail ne supporte pas non plus les keywords utilisateur définis — les tags s'affichent bien dans Dolibarr mais ne sont pas synchronisés dans l'interface Gmail. La synchronisation fonctionne de manière fiable sur Dovecot, Cyrus et Exchange.
 
 ### Paramètres globaux
 

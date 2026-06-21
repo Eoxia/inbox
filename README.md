@@ -131,36 +131,25 @@ WhatsApp accounts receive messages via a Meta webhook (push model) and send via 
 3. Generate a **System User Token** (permanent) with `whatsapp_business_messaging` permission.
 4. Note the **Phone Number ID** from the WhatsApp → Getting Started page.
 
-#### 2 — Insert an account in Dolibarr
+#### 2 — Create a WhatsApp account in Dolibarr
 
-Until the admin UI supports WhatsApp, insert directly in the database:
+Go to **Home → Setup → Modules → Inbox**, click **Add account**, then select **WhatsApp Business Cloud API** as the provider type.
 
-```sql
-INSERT INTO llx_inbox_account
-    (label, email, provider_type, config, status, date_creation)
-VALUES (
-    'WhatsApp Business',
-    'wa:+33600000000',
-    'whatsapp',
-    '{"phone_number_id":"123456789","access_token":"EAAxx...","verify_token":"mySecret123"}',
-    1,
-    NOW()
-);
-```
-
-| Config key | Description |
+| Field | Description |
 |---|---|
-| `phone_number_id` | Phone Number ID from Meta Developer Console |
-| `access_token` | System User permanent token |
-| `verify_token` | Arbitrary secret used to verify the webhook |
-| `api_version` | Optional — Graph API version, default `v20.0` |
+| Label | Display name in the sidebar |
+| Phone Number ID | Phone Number ID from Meta Developer Console (WhatsApp → Getting Started) |
+| Access Token | System User permanent token with `whatsapp_business_messaging` permission |
+| Verify Token | Arbitrary secret you choose — must match what you enter in Meta's webhook configuration |
+| API version | Optional — Graph API version, default `v20.0` |
+
+Save the account. The webhook URL is displayed on the edit form once the account is saved.
 
 #### 3 — Configure the Meta webhook
 
 In Meta Developer Console → WhatsApp → Configuration:
 
-- **Callback URL**: `https://your-domain/custom/inbox/ajax/whatsapp_webhook.php?account_id=N`  
-  (replace `N` with the `rowid` of the account you just inserted)
+- **Callback URL**: the webhook URL shown on the account edit form (format: `https://your-domain/custom/inbox/ajax/whatsapp_webhook.php?account_id=N`)
 - **Verify Token**: the `verify_token` value from the config JSON above
 - **Webhook fields**: subscribe to `messages`
 
@@ -170,7 +159,7 @@ Send a WhatsApp message to your business number. It should appear in the Inbox w
 
 ### Tags
 
-Go to the **Tags** tab of the Inbox setup page. Tags are defined globally by an administrator and can be assigned to any message.
+Go to the **Tags** tab of the Inbox setup page. Tags are global definitions (scoped to the Dolibarr entity) — they are not tied to a specific account and are available for all accounts.
 
 | Field | Description |
 |---|---|
@@ -178,7 +167,9 @@ Go to the **Tags** tab of the Inbox setup page. Tags are defined globally by an 
 | Color | Hex color code (used in the UI badge) |
 | IMAP keyword | Optional ASCII keyword stored on the IMAP server (no spaces, synced across mail clients) |
 
-> IMAP keywords are silently ignored for WhatsApp accounts.
+Tag *assignments* (which tag is on which message) are stored per-account in `llx_inbox_message_tag`.
+
+> **IMAP keyword sync compatibility:** IMAP keywords are silently ignored for WhatsApp accounts. Gmail also does not support user-defined IMAP keywords — tags still appear in Dolibarr but are not synced to the Gmail interface. Keyword sync works reliably on Dovecot, Cyrus, and Exchange servers.
 
 ### Global settings
 
