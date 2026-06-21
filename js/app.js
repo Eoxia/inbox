@@ -95,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	let trashFolder = null; // detected from folder list
 	let currentIframe = null;
 	let currentAccountId = null;
+	let threadedView = false;
 
 	// Reset the view panel to an empty state without hiding it (keeps layout stable)
 	const clearViewPanel = () => {
@@ -106,7 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		document.querySelector('.sender-name').innerHTML = '';
 		document.querySelector('.sender-email').innerHTML = '';
 		document.querySelector('.email-view-date').innerText = '';
-		document.querySelector('.email-view-body').innerHTML = '';
+		const bodyEl = document.querySelector('.email-view-body');
+		bodyEl.innerHTML = '';
+		bodyEl.className = 'email-view-body';
 		document.getElementById('remote-images-banner').style.display = 'none';
 		document.getElementById('reply-form-container').style.display = 'none';
 		document.getElementById('email-view-tags').querySelectorAll('.tag-dynamic').forEach(t => t.remove());
@@ -445,6 +448,224 @@ document.addEventListener('DOMContentLoaded', () => {
 		return el;
 	};
 
+	// Build a thread list item (conversation row)
+	const buildThreadEl = (thread) => {
+		const el = document.createElement('div');
+		el.className = 'email-item thread-item ' + (thread.seen ? '' : 'unread');
+		el.dataset.uid = thread.uid;
+
+		const names = (thread.participants || [thread.from]).map(p => {
+			const parsed = parseRecipients(p);
+			return parsed.length ? parsed[0].name : p;
+		}).slice(0, 3).join(', ');
+
+		const countBadge = thread.count > 1
+			? `<span class="thread-count">${thread.count}</span>`
+			: '';
+		const unreadDot = thread.unseen_count > 0
+			? `<span class="thread-unread-count">${thread.unseen_count}</span>`
+			: '';
+
+		el.innerHTML = `
+			<div class="email-item-header">
+				<span class="email-sender">${names}${unreadDot}</span>
+				<span class="email-date" title="${thread.date}">${formatDate(thread.date)}</span>
+			</div>
+			<div class="email-subject">${thread.subject} ${countBadge}</div>
+			<div class="email-item-actions">
+				<button class="email-action-btn btn-item-trash" title="Mettre à la corbeille">
+					<i class="fa fa-trash"></i>
+				</button>
+			</div>
+		`;
+
+		el.querySelector('.btn-item-trash').addEventListener('click', (e) => {
+			e.stopPropagation();
+			const fd = new FormData();
+			fd.append('uid', thread.uid);
+			fd.append('folder', currentFolder);
+			fd.append('account_id', currentAccountId);
+			if (trashFolder) fd.append('trash_folder', trashFolder);
+			fetch('../../custom/inbox/ajax/trash_email.php', { method: 'POST', body: fd })
+				.then(r => r.json())
+				.then(data => {
+					if (data.success) {
+						el.remove();
+						if (currentEmail && String(currentEmail.uid) === String(thread.uid)) clearViewPanel();
+					}
+				})
+				.catch(() => {});
+		});
+
+		el.addEventListener('click', () => {
+			document.querySelectorAll('.email-item').forEach(em => em.classList.remove('active'));
+			el.classList.add('active');
+			el.classList.remove('unread');
+			el.querySelector('.thread-unread-count')?.remove();
+
+			currentEmail = thread;
+			document.getElementById('reply-form-container').style.display = 'none';
+			showConversation(thread);
+
+			// Mark all messages in the thread as read
+			(thread.messages || []).forEach(msg => {
+				if (!msg.seen) {
+					msg.seen = 1;
+					const fd = new URLSearchParams({ uid: msg.uid, folder: currentFolder, account_id: currentAccountId });
+					fetch('../../custom/inbox/ajax/mark_seen.php', { method: 'POST', body: fd }).catch(() => {});
+				}
+			});
+			fetchUnreadCounts();
+		});
+
+		return el;
+	};
+
+	// Render a conversation (thread) in the view panel
+	const showConversation = (thread) => {
+		document.getElementById('reply-form-container').style.display = 'none';
+		document.getElementById('remote-images-banner').style.display = 'none';
+		document.getElementById('email-attachment-bar')?.remove();
+		const tpw = document.getElementById('tag-picker-wrapper');
+		if (tpw) tpw.style.display = 'none';
+
+		document.querySelector('.email-view-subject').innerText = thread.subject;
+		document.querySelector('.email-view-date').innerText = '';
+
+		// Participants
+		const allParticipants = (thread.participants || [thread.from]).flatMap(p => parseRecipients(p));
+		const namesHtml = allParticipants.map(r => {
+			const safe = r.email.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+			return `<span title="${safe}" style="cursor:default;border-bottom:1px dotted #94a3b8;">${r.name}</span>`;
+		}).join(', ');
+		document.querySelector('.sender-name').innerHTML = namesHtml;
+		const msgCount = (thread.messages || []).length;
+		document.querySelector('.sender-email').innerHTML =
+			`<span style="color:#64748b;">${msgCount} message${msgCount > 1 ? 's' : ''}</span>`;
+
+		// Avatar from first participant
+		const avatarEl = document.querySelector('.sender-avatar');
+		if (avatarEl && allParticipants.length) {
+			const name  = allParticipants[0].name;
+			const words = name.trim().split(/\s+/);
+			avatarEl.textContent = (words.length >= 2
+				? (words[0][0] + words[words.length - 1][0])
+				: name.slice(0, 2)).toUpperCase();
+		}
+
+		const bodyEl = document.querySelector('.email-view-body');
+		bodyEl.innerHTML = '';
+		bodyEl.className = 'email-view-body conversation-view';
+
+		const messages = thread.messages || [];
+		if (messages.length === 0) {
+			bodyEl.innerHTML = '<div style="padding:20px;color:#888;">Aucun message dans ce fil.</div>';
+			return;
+		}
+
+		// Build message cards oldest-first; expand the last one automatically
+		messages.forEach((msg, idx) => {
+			bodyEl.appendChild(buildMessageCard(msg, idx === messages.length - 1));
+		});
+
+		// Scroll to latest (bottom)
+		setTimeout(() => { bodyEl.scrollTop = bodyEl.scrollHeight; }, 50);
+	};
+
+	// Build a collapsible message card for conversation view
+	const buildMessageCard = (msg, expanded = false) => {
+		const card = document.createElement('div');
+		card.className = 'conversation-card ' + (expanded ? 'expanded' : 'collapsed');
+		card.dataset.uid = msg.uid;
+
+		const fromParsed = parseRecipients(msg.from);
+		const fromName   = fromParsed.length ? fromParsed[0].name : msg.from;
+		const initials   = fromName.slice(0, 1).toUpperCase();
+		const unreadDot  = !msg.seen ? '<span class="card-unread-dot"></span>' : '';
+
+		const header = document.createElement('div');
+		header.className = 'conversation-card-header';
+		header.innerHTML = `
+			<div class="card-sender">
+				<span class="card-avatar">${initials}</span>
+				<span class="card-from">${fromName}</span>
+				${unreadDot}
+			</div>
+			<span class="card-date">${formatDateFull(msg.date)}</span>
+		`;
+
+		const body = document.createElement('div');
+		body.className = 'conversation-card-body';
+
+		card.appendChild(header);
+		card.appendChild(body);
+
+		if (expanded) loadCardBody(body, msg.uid);
+
+		header.addEventListener('click', () => {
+			const isCollapsed = card.classList.contains('collapsed');
+			card.classList.toggle('collapsed', !isCollapsed);
+			card.classList.toggle('expanded', isCollapsed);
+			if (isCollapsed && body.innerHTML === '') loadCardBody(body, msg.uid);
+		});
+
+		return card;
+	};
+
+	// Fetch and render the body of one message inside a conversation card
+	const loadCardBody = (bodyEl, uid) => {
+		bodyEl.innerHTML = '<div style="padding:16px;text-align:center;color:#888;"><i class="fa fa-spinner fa-spin"></i></div>';
+		fetch('../../custom/inbox/ajax/get_email_body.php?uid=' + uid
+				+ '&folder=' + encodeURIComponent(currentFolder)
+				+ '&account_id=' + encodeURIComponent(currentAccountId))
+			.then(r => r.json())
+			.then(data => {
+				if (data.error) {
+					bodyEl.innerHTML = '<div style="color:red;padding:10px;">Erreur : ' + data.error + '</div>';
+					return;
+				}
+				const iframe = document.createElement('iframe');
+				iframe.style.cssText = 'width:100%; border:none; display:block; min-height:80px;';
+				iframe.setAttribute('sandbox', 'allow-same-origin allow-popups');
+				bodyEl.innerHTML = '';
+				bodyEl.appendChild(iframe);
+
+				let displayBody = data.body;
+				if (data.block_images) displayBody = blockRemoteImages(data.body);
+				iframe.srcdoc = displayBody;
+				iframe.addEventListener('load', () => {
+					try {
+						iframe.style.height = Math.max(80, iframe.contentDocument.documentElement.scrollHeight) + 'px';
+					} catch (e) {}
+				});
+
+				if (data.attachments && data.attachments.length > 0) {
+					const attRow = document.createElement('div');
+					attRow.style.cssText = 'padding:6px 0 2px; display:flex; flex-wrap:wrap; gap:6px;';
+					data.attachments.forEach(att => {
+						const kb  = att.size > 0 ? ' (' + (att.size > 1048576 ? (att.size / 1048576).toFixed(1) + ' Mo' : Math.ceil(att.size / 1024) + ' Ko') + ')' : '';
+						const url = '../../custom/inbox/ajax/get_attachment.php?uid=' + encodeURIComponent(uid)
+							+ '&partno=' + encodeURIComponent(att.partno)
+							+ '&encoding=' + encodeURIComponent(att.encoding || 0)
+							+ '&folder=' + encodeURIComponent(currentFolder)
+							+ '&filename=' + encodeURIComponent(att.filename);
+						const chip = document.createElement('a');
+						chip.href = url; chip.target = '_blank';
+						chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#fff;border:1px solid #cbd5e1;border-radius:20px;font-size:0.82em;color:#1e293b;text-decoration:none;';
+						chip.innerHTML = '<i class="fa fa-file-o"></i> ' + att.filename + '<span style="color:#94a3b8;">' + kb + '</span>';
+						attRow.appendChild(chip);
+					});
+					bodyEl.appendChild(attRow);
+				}
+			})
+			.catch(() => {
+				bodyEl.innerHTML = '<div style="color:red;padding:10px;">Erreur réseau</div>';
+			});
+	};
+
+	// Dispatch to the right builder depending on view mode
+	const buildListItem = (email) => email.is_thread ? buildThreadEl(email) : buildEmailEl(email);
+
 	// Clear email list keeping the sentinel intact
 	const clearEmailList = () => {
 		const container = document.getElementById('email-list-container');
@@ -490,13 +711,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		const url = '../../custom/inbox/ajax/get_emails.php?folder=' + encodeURIComponent(currentFolder)
 			+ '&offset=' + (emailPage * EMAIL_PAGE_SIZE)
-			+ '&account_id=' + encodeURIComponent(currentAccountId);
+			+ '&account_id=' + encodeURIComponent(currentAccountId)
+			+ (threadedView ? '&threaded=1' : '');
 
-		// Snapshot the ordered UIDs, selected UID and scroll position before clearing
-		const previousUid       = currentEmail ? String(currentEmail.uid) : null;
-		const previousUids      = Array.from(container.querySelectorAll('.email-item[data-uid]'))
+		// Snapshot the ordered UIDs and selected UID before any list mutation
+		const previousUid  = currentEmail ? String(currentEmail.uid) : null;
+		const previousUids = Array.from(container.querySelectorAll('.email-item[data-uid]'))
 			.map(el => el.dataset.uid);
-		const previousScrollTop = container.scrollTop;
 
 		const resetUI = () => {
 			if (syncIcon) syncIcon.classList.remove('fa-spin');
@@ -521,17 +742,49 @@ document.addEventListener('DOMContentLoaded', () => {
 					return;
 				}
 
-				if (reset) clearEmailList();
-
-				if (data.data && data.data.length > 0) {
-					data.data.forEach(email => {
-						container.insertBefore(buildEmailEl(email), sentinel);
-					});
-				} else if (reset) {
-					const emptyDiv = document.createElement('div');
-					emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
-					emptyDiv.textContent = 'Aucun email trouvé.';
-					container.insertBefore(emptyDiv, sentinel);
+				if (reset && folderSwitch) {
+					// Folder switch: full rebuild, blank slate
+					clearEmailList();
+					if (data.data && data.data.length > 0) {
+						data.data.forEach(email => {
+							container.insertBefore(buildListItem(email), sentinel);
+						});
+					} else {
+						const emptyDiv = document.createElement('div');
+						emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
+						emptyDiv.textContent = 'Aucun email trouvé.';
+						container.insertBefore(emptyDiv, sentinel);
+					}
+				} else if (reset && !folderSwitch) {
+					// Same-folder refresh: update existing items in place so scroll is never disrupted
+					const existingMap = new Map(
+						Array.from(container.querySelectorAll('.email-item[data-uid]'))
+							.map(el => [el.dataset.uid, el])
+					);
+					if (data.data && data.data.length > 0) {
+						const firstItem = container.querySelector('.email-item[data-uid]');
+						data.data.forEach(email => {
+							const uid = String(email.uid);
+							if (existingMap.has(uid)) {
+								existingMap.get(uid).classList.toggle('unread', !email.seen);
+							} else {
+								// New email/thread arrived: prepend before existing items
+								container.insertBefore(buildListItem(email), firstItem || sentinel);
+							}
+						});
+					} else if (existingMap.size === 0) {
+						const emptyDiv = document.createElement('div');
+						emptyDiv.style.cssText = 'padding: 20px; text-align: center; color: #64748b;';
+						emptyDiv.textContent = 'Aucun email trouvé.';
+						container.insertBefore(emptyDiv, sentinel);
+					}
+				} else {
+					// Pagination: append next page to existing list
+					if (data.data && data.data.length > 0) {
+						data.data.forEach(email => {
+							container.insertBefore(buildListItem(email), sentinel);
+						});
+					}
 				}
 
 				emailsHasMore = data.has_more;
@@ -550,14 +803,9 @@ document.addEventListener('DOMContentLoaded', () => {
 						? container.querySelector(`.email-item[data-uid="${previousUid}"]`)
 						: null;
 
-					if (!previousUid) {
-						// No email was selected — restore scroll after browser has laid out new items
-						requestAnimationFrame(() => { container.scrollTop = previousScrollTop; });
-					} else if (prevItem) {
-						// Email still present: restore highlight and scroll position silently
+					if (previousUid && prevItem) {
 						prevItem.classList.add('active');
-						requestAnimationFrame(() => { container.scrollTop = previousScrollTop; });
-					} else if (allItems.length > 0) {
+					} else if (previousUid && !prevItem && allItems.length > 0) {
 						// Selected email disappeared: navigate to nearest neighbor
 						const prevIndex = previousUids.indexOf(previousUid);
 						const newUidSet = new Set(allItems.map(el => el.dataset.uid));
@@ -577,8 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
 							target.click();
 							target.scrollIntoView({ block: 'nearest', behavior: 'instant' });
 						}
-					} else {
-						// List is now empty: clear the view panel
+					} else if (previousUid && allItems.length === 0) {
 						clearViewPanel();
 					}
 				}
@@ -647,6 +894,20 @@ document.addEventListener('DOMContentLoaded', () => {
 	const btnSync = document.querySelector('.inbox-panel-header .fa-sync');
 	if (btnSync) {
 		btnSync.parentElement.addEventListener('click', () => fetchEmails());
+	}
+
+	// Thread view toggle
+	const btnToggleThread = document.getElementById('btn-toggle-thread');
+	if (btnToggleThread) {
+		btnToggleThread.addEventListener('click', () => {
+			threadedView = !threadedView;
+			btnToggleThread.classList.toggle('active', threadedView);
+			const icon = btnToggleThread.querySelector('i');
+			icon.className = threadedView ? 'fa fa-list' : 'fa fa-comments-o';
+			btnToggleThread.title = threadedView ? 'Vue liste simple' : 'Vue par fils de discussion';
+			clearViewPanel();
+			fetchEmails(true, true); // Force full rebuild for view mode switch
+		});
 	}
 
 	// Auto-refresh: reload email list at the configured interval (skip if composing)
@@ -968,6 +1229,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		fd.append('message_id', message_id);
 		fd.append('uid', currentEmail.uid);
 		fd.append('folder', currentFolder);
+		fd.append('account_id', currentAccountId);
 
 		fetch('../../custom/inbox/ajax/add_message_tag.php', { method: 'POST', body: fd })
 			.then(r => r.json())
@@ -997,6 +1259,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		fd.append('message_id', currentEmail.message_id);
 		fd.append('uid', currentEmail.uid);
 		fd.append('folder', currentFolder);
+		fd.append('account_id', currentAccountId);
 
 		chipEl.style.opacity = '0.4';
 		fetch('../../custom/inbox/ajax/remove_message_tag.php', { method: 'POST', body: fd })

@@ -33,15 +33,25 @@ $folder     = GETPOST('folder', 'restricthtml') ?: 'INBOX';
 if (!$fk_tag)     { print json_encode(array('error' => 'Missing fk_tag'));     exit; }
 if (!$message_id) { print json_encode(array('error' => 'Missing message_id')); exit; }
 
-// Resolve account
-$sql   = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
-$resql = $db->query($sql);
-if (!$resql || $db->num_rows($resql) == 0) {
-	$sql   = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
+// Resolve account — prefer the explicitly posted account_id
+$posted_account_id = (int) GETPOST('account_id', 'int');
+if ($posted_account_id > 0) {
+	$sql   = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE rowid = ".$posted_account_id." AND status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) LIMIT 1";
 	$resql = $db->query($sql);
+	if (!$resql || $db->num_rows($resql) == 0) {
+		print json_encode(array('error' => 'Account not found or access denied')); exit;
+	}
+	$fk_account = (int) $db->fetch_object($resql)->rowid;
+} else {
+	$sql   = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 AND (fk_user = ".((int)$user->id)." OR shared = 1) ORDER BY rowid ASC LIMIT 1";
+	$resql = $db->query($sql);
+	if (!$resql || $db->num_rows($resql) == 0) {
+		$sql   = "SELECT rowid FROM ".MAIN_DB_PREFIX."inbox_account WHERE status = 1 ORDER BY rowid ASC LIMIT 1";
+		$resql = $db->query($sql);
+	}
+	if (!$resql || $db->num_rows($resql) == 0) { print json_encode(array('error' => 'No active mailbox')); exit; }
+	$fk_account = (int) $db->fetch_object($resql)->rowid;
 }
-if (!$resql || $db->num_rows($resql) == 0) { print json_encode(array('error' => 'No active mailbox')); exit; }
-$fk_account = (int) $db->fetch_object($resql)->rowid;
 
 // Load tag to get label/color/imap_keyword
 $tag = new InboxTag($db);
