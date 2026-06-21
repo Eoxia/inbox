@@ -87,7 +87,27 @@ InboxSubject=Objet :
 InboxCancelSend=Annuler l'envoi
 InboxSend=Envoyer
 
+# Provider type
+InboxProviderType=Type de messagerie
+InboxProviderTypeLabel=Type de provider
+InboxProviderImapDesc=Email standard via IMAP/SMTP
+InboxProviderWhatsAppDesc=WhatsApp Business Cloud API (Meta)
+
+# Champs config WhatsApp
+InboxWAPhoneNumberId=Phone Number ID
+InboxWAPhoneNumberIdHelp=Identifiant Meta du numéro (WhatsApp → Getting Started)
+InboxWAAccessToken=Jeton d'accès
+InboxWAVerifyToken=Verify Token
+InboxWAVerifyTokenHelp=Secret arbitraire pour vérifier le webhook Meta
+InboxWAApiVersion=Version API
+InboxWAApiVersionHelp=Défaut : v20.0
+InboxWAWebhookUrl=URL du webhook
+InboxWAWebhookUrlHelp=À configurer dans Meta Developer Console (WhatsApp → Configuration → Webhook)
+InboxWAWebhookUrlAfterSave=Enregistrez d'abord le compte pour obtenir l'URL du webhook.
+
 # Misc
+LeaveEmptyToKeep=Laisser vide pour conserver la valeur actuelle
+ConfirmDeleteAccount=Êtes-vous sûr de vouloir supprimer ce compte ?
 Synchronization=Synchronisation
 Parameter=Paramètre
 Value=Valeur
