@@ -4,8 +4,6 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-	console.log("Inbox module initialized");
-
 	// Parse "Name <email>, ..." into [{name, email}]
 	const parseRecipients = (str) => {
 		if (!str) return [];
@@ -79,19 +77,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		}).join(', ');
 	};
 
-	// Simple event listeners for the mockup interactions
-	
-	// 1. Mailbox navigation
-	const folders = document.querySelectorAll('.folder-list li');
-	folders.forEach(folder => {
-		folder.addEventListener('click', (e) => {
-			folders.forEach(f => f.classList.remove('active'));
-			e.currentTarget.classList.add('active');
-			// In real version, fetch emails via Ajax
-			console.log("Switching folder...");
-		});
-	});
-
 	// Current selected email state
 	let currentEmail = null;
 	let currentEmailBody = '';
@@ -131,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	let emailsLoading = false;
 	let emailsHasMore = false;
 	let scrollObserver = null; // IntersectionObserver for infinite scroll
+	let currentFetchController = null; // AbortController for in-flight email fetch
 
 	// Fetch folders for a given account
 	const fetchFolders = (accountId) => {
@@ -682,8 +668,16 @@ document.addEventListener('DOMContentLoaded', () => {
 	// reset=true  : replace list  (folderSwitch=true → clear immediately, false → silent background)
 	// reset=false : append next page
 	const fetchEmails = (reset = true, folderSwitch = false) => {
+		if (folderSwitch && currentFetchController) {
+			// Cancel the in-flight request so stale results don't overwrite the new folder
+			currentFetchController.abort();
+			emailsLoading = false;
+		}
 		if (emailsLoading) return;
 		emailsLoading = true;
+
+		currentFetchController = new AbortController();
+		const signal = currentFetchController.signal;
 
 		const container = document.getElementById('email-list-container');
 		const sentinel = document.getElementById('email-list-sentinel');
@@ -729,7 +723,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			document.getElementById('email-page-loader')?.remove();
 		};
 
-		fetch(url)
+		fetch(url, { signal })
 			.then(response => response.json())
 			.then(data => {
 				emailsLoading = false;
@@ -835,6 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				}
 			})
 			.catch(err => {
+				if (err.name === 'AbortError') return; // folder switch cancelled this request
 				emailsLoading = false;
 				resetUI();
 				if (reset) {
